@@ -741,14 +741,14 @@ const CLIENT_ID = "5c5dcd7b-1eb1-4071-a232-e0e48795d163";           // "Asset Re
 const SP_HOSTNAME = "saxonrenewables.sharepoint.com";
 const SP_SITE_PATH = "/sites/Operations";
 const APPROVED_LIST_NAME = "BD Agreement Record Approved";
-const SP_FILE_NAME = "BD Agreement Record.xlsx"; // TODO: set to the TEST workbook's actual filename — only used as a fallback + in error messages if the share link above ever stops resolving, but should still match for those messages to make sense
+const SP_FILE_NAME = "Asset_Registration_Record.xlsx"; // fallback + used in error messages if the share link above ever stops resolving
 // Resolving straight from this sharing link (instead of guessing the site's
 // default drive + a root-level path) sidesteps two whole classes of failure:
 // the file living in a non-default document library, and it living inside
 // a subfolder rather than at the drive root. If the file ever moves, just
 // grab its "Copy link" URL again and paste it in here — nothing else in
 // resolveWorkbook needs to change.
-const SP_FILE_SHARE_URL = "https://saxonrenewables.sharepoint.com/:x:/s/Operations/IQC3oy3-O1R-T5H8XC8kLbuHAUoxyzCMl_Nft_Pmn5U5INo?e=PnIE0j"; // TEST workbook — not BD Agreement Record.xlsx
+const SP_FILE_SHARE_URL = "https://saxonrenewables.sharepoint.com/:x:/s/Operations/IQDpRDV9sZotTo7xIuXuszG_AQgOtIko6vjFMGwjeWcToNg?e=2tTysq"; // Asset Registration Record workbook
 const LOG_TABLE_NAME = "TradeDealLog";        // must match the Excel Table name you create
 // Column layout of the restructured TradeDealLog "main list" table.
 // One physical row per TRADE (a multi-trade agreement produces several rows
@@ -910,29 +910,33 @@ const DEAL_ID_START_KEY = "dealIdStart";
 // for Asset (no "Pending ..." staging columns) — a saved/approved row is
 // final.
 //
-// Every fee is stored as TWO columns — "<Fee> Currency" (text: USD/SGD/RM)
-// and "<Fee> Amount" (number) — instead of one combined text column, so the
-// amount can be summed/charted directly in Excel.
+// Every fee amount is stored as ONE column (number) — there is no separate
+// "<Fee> Currency" column per fee/per-year anymore. Currency is a single
+// SHARED field for the whole agreement (see "currency" in ASSET_SHARED_KEYS
+// below) — one currency applies to every price/fee row a deal has, so it
+// only needs to be captured once.
 //
 // Shared columns (same in all 3 tables, in this order):
 //   BD In Charge, Asset ID, Entity, Agreement Start Date, Agreement End
 //   Date, Supplier, Registry, Device Status, Payment Term, Broker, BNM
-//   Rate, Special Remarks, Device Owner Name, REC Issuance Start Date, COD.
+//   Rate, Currency, Special Remarks, Device Owner Name, REC Issuance Start
+//   Date, COD.
 //   (There is deliberately NO "Agreement Type" column — the table itself,
 //   i.e. which of the 3 tables a row lives in, already tells you the type.)
 // Then, per table:
-//   AssetTradeDealLog_OutrightPurchase adds: Price/RECs <Currency><Amount>
-//     for each fixed year 2020..2030 (22 columns).
-//   AssetTradeDealLog_SelfManage adds: Service Fee/RECs <Currency><Amount>
-//     for each fixed year 2020..2030 (22 cols) + Device Registration Fee /
-//     RECs Issuance Fee / Redemption Fee, each as a ONE-TIME <Currency>
-//     <Amount> pair for the whole deal (6 cols) — these 3 fees are
-//     shared-design with Profit Sharing, not per-year. (Self Manage
-//     originally also had per-year Price/RECs columns; those were dropped
-//     from the sheet, so this table no longer carries them.)
+//   AssetTradeDealLog_OutrightPurchase adds: Price/RECs Amount for each
+//     fixed year 2020..2030 (11 columns).
+//   AssetTradeDealLog_SelfManage adds: Service Fee/RECs Amount for each
+//     fixed year 2020..2030 (11 cols) + Device Registration Fee / RECs
+//     Issuance Fee / Redemption Fee, each as a ONE-TIME Amount for the
+//     whole deal (3 cols) — these 3 fees are shared-design with Profit
+//     Sharing, not per-year. (Self Manage originally also had per-year
+//     Price/RECs columns, and originally a Currency column per fee/year;
+//     both were dropped from the sheet, so this table no longer carries
+//     them.)
 //   AssetTradeDealLog_ProfitSharing adds: Profit Ratio - Saxon (%), Profit
-//     Ratio - Device Owner (%), then the same 3 one-time fees as Self
-//     Manage (6 cols).
+//     Ratio - Device Owner (%), then the same 3 one-time fee Amounts as
+//     Self Manage (3 cols).
 // Then every table ends with the same tail columns:
 //   Pricing Summary, Submitted By, Submitted Date, Generated HTML, Status,
 //   Approved By (Level 1), Approved Date (Level 1), Approved By (Level 2),
@@ -940,10 +944,11 @@ const DEAL_ID_START_KEY = "dealIdStart";
 //   3), Rejected By, Rejected Date, Rejection Comment, Agreement File
 //   Name, Agreement File URL, Description, Row Uid, Approved List Item Id.
 const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
+const ASSET_CURRENCY_OPTIONS = ['USD','SGD','RM'];
 const ASSET_SHARED_KEYS = [
   'bdInCharge','assetId','entity','agreementStart','agreementEnd','supplier',
-  'registry','deviceStatus','paymentTerm','broker','bnmRate','specialRemarks',
-  'deviceOwnerName','recIssuanceStart','cod'
+  'registry','deviceStatus','paymentTerm','broker','bnmRate','currency',
+  'specialRemarks','deviceOwnerName','recIssuanceStart','cod'
 ];
 const ASSET_TAIL_KEYS = [
   'pricingSummary','submittedBy','submittedDate','generatedHtml','status',
@@ -953,13 +958,10 @@ const ASSET_TAIL_KEYS = [
 ];
 function assetYearFeeKeys(prefix){
   const keys = [];
-  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'Ccy', prefix+y+'Amt'); }
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'Amt'); }
   return keys;
 }
-const ASSET_ONETIME_FEE_KEYS = [
-  'deviceRegFeeCcy','deviceRegFeeAmt','recsIssuanceFeeCcy','recsIssuanceFeeAmt',
-  'redemptionFeeCcy','redemptionFeeAmt'
-];
+const ASSET_ONETIME_FEE_KEYS = ['deviceRegFeeAmt','recsIssuanceFeeAmt','redemptionFeeAmt'];
 function buildAssetColMap(pricingKeys){
   const map = {};
   ASSET_SHARED_KEYS.concat(pricingKeys, ASSET_TAIL_KEYS).forEach((k,i)=>{ map[k] = i; });
@@ -6275,18 +6277,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const wrap = e.target.closest('[id$="-wrap"]');
     if(wrap) wrap.classList.remove('field-missing');
   });
-  function feeInput(id, def){
-    return '<div class="fee-field">'+
-      '<select id="'+id+'-ccy">'+
-        ['USD','SGD','RM'].map(c=>'<option value="'+c+'"'+(c===(def&&def.ccy||'USD')?' selected':'')+'>'+c+'</option>').join('')+
-      '</select>'+
-      '<input type="text" inputmode="decimal" id="'+id+'-amt" placeholder="0.00" value="'+escapeHtml(def&&def.amt||'')+'"/>'+
-      '</div>';
+  function amountInput(id, def){
+    return '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+id+'-amt" placeholder="0.00" value="'+escapeHtml(def&&def.amt||'')+'"/>';
   }
-  function feeVal(id){
-    const ccy = val(id+'-ccy');
+  function amountVal(id){
     const amt = val(id+'-amt');
-    return {ccy, amt, text: amt ? (ccy+' '+amt) : ''};
+    return {amt, text: amt || ''};
   }
 
   const DEVICE_STATUS_OPTIONS = ["New","Renew","Transfer"];
@@ -6303,6 +6299,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       fieldHtml('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
       fieldHtml('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
       fieldHtml('BNM Rate', textInput('asset-h-bnm-rate','e.g. 4.4700'), 'asset-h-bnm-rate') +
+      fieldHtml('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, ASSET_CURRENCY_OPTIONS[0]), 'asset-h-currency') +
       '<div style="grid-column:1 / -1;">'+
         fieldHtml('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
       '</div>';
@@ -6336,9 +6333,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
         '<div class="grid">'+
-          fieldHtml('Device registration fee (one-time)', feeInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-wrap')+
-          fieldHtml('RECs issuance fee (one-time)', feeInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-wrap')+
-          fieldHtml('Redemption fee (one-time)', feeInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-wrap')+
+          fieldHtml('Device registration fee (one-time)', amountInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-wrap')+
+          fieldHtml('RECs issuance fee (one-time)', amountInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-wrap')+
+          fieldHtml('Redemption fee (one-time)', amountInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-wrap')+
         '</div>'+
         '<div class="trade-count-row" style="margin-top:16px;">'+
           '<label style="margin:0;">Number of years</label>'+
@@ -6353,9 +6350,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         '<div class="grid">'+
           fieldHtml('Profit Ratio — Saxon (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-saxon" placeholder="e.g. 70"/>', 'asset-ps-ratio-saxon')+
           fieldHtml('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 30"/>', 'asset-ps-ratio-owner')+
-          fieldHtml('Device registration fee', feeInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-wrap')+
-          fieldHtml('RECs issuance fee', feeInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-wrap')+
-          fieldHtml('Redemption fee', feeInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-wrap')+
+          fieldHtml('Device registration fee', amountInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-wrap')+
+          fieldHtml('RECs issuance fee', amountInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-wrap')+
+          fieldHtml('Redemption fee', amountInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-wrap')+
         '</div>';
     }
   }
@@ -6396,9 +6393,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       const yEl = document.getElementById('asset-y'+i+'-year');
       if(!yEl) continue;
       prevYear[i] = yEl.value;
-      prevPrice[i] = feeVal('asset-y'+i+'-price');
+      prevPrice[i] = amountVal('asset-y'+i+'-price');
       if(agreementType === 'Self Manage'){
-        prevSvc[i] = feeVal('asset-y'+i+'-service-fee');
+        prevSvc[i] = amountVal('asset-y'+i+'-service-fee');
       }
     }
     let html = '';
@@ -6411,11 +6408,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           fieldHtml('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year-wrap');
       if(agreementType !== 'Self Manage'){
         html +=
-          fieldHtml('Price / RECs', feeInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-wrap');
+          fieldHtml('Price / RECs', amountInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-wrap');
       }
       if(agreementType === 'Self Manage'){
         html +=
-          fieldHtml('Service fee / RECs', feeInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap');
+          fieldHtml('Service fee / RECs', amountInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap');
       }
       html += '</div></div>';
     }
@@ -6426,11 +6423,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const toYear = document.getElementById('asset-y'+toIdx+'-year');
     if(fromYear && toYear) toYear.value = fromYear.value;
     ['price','service-fee'].forEach(suffix=>{
-      const fromCcy = document.getElementById('asset-y'+fromIdx+'-'+suffix+'-ccy');
-      const toCcy = document.getElementById('asset-y'+toIdx+'-'+suffix+'-ccy');
       const fromAmt = document.getElementById('asset-y'+fromIdx+'-'+suffix+'-amt');
       const toAmt = document.getElementById('asset-y'+toIdx+'-'+suffix+'-amt');
-      if(fromCcy && toCcy) toCcy.value = fromCcy.value;
       if(fromAmt && toAmt) toAmt.value = fromAmt.value;
     });
   }
@@ -6519,7 +6513,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
       ['asset-h-broker','Broker (if any)'],
-      ['asset-h-bnm-rate','BNM Rate']
+      ['asset-h-bnm-rate','BNM Rate'],
+      ['asset-h-currency','Currency']
     ];
     detailFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Details', label}); markMissing(id); }
@@ -6537,11 +6532,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           }
         }
         if(agreementType !== 'Self Manage'){
-          const price = feeVal('asset-y'+i+'-price');
+          const price = amountVal('asset-y'+i+'-price');
           if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price'); }
         }
         if(agreementType === 'Self Manage'){
-          const svc = feeVal('asset-y'+i+'-service-fee');
+          const svc = amountVal('asset-y'+i+'-service-fee');
           if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee'); }
         }
       }
@@ -6549,7 +6544,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         // One-time fees, shared design with Profit Sharing — validated once
         // for the whole deal, not per-year.
         [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-          const f = feeVal(id);
+          const f = amountVal(id);
           if(!f.amt){ missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id); }
         });
       }
@@ -6557,7 +6552,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       if(!val('asset-ps-ratio-saxon')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Saxon (%)'}); markMissing('asset-ps-ratio-saxon'); }
       if(!val('asset-ps-ratio-owner')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Device Owner (%)'}); markMissing('asset-ps-ratio-owner'); }
       [['asset-ps-device-reg-fee','Device registration fee'],['asset-ps-recs-issuance-fee','RECs issuance fee'],['asset-ps-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-        const f = feeVal(id);
+        const f = amountVal(id);
         if(!f.amt){ missing.push({section:'Pricing & Fees', label}); markMissing(id); }
       });
     }
@@ -6594,6 +6589,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     rows.push(['Broker (if any)', val('asset-h-broker') || 'N/A']);
     rows.push(['BNM Rate', val('asset-h-bnm-rate')]);
+    rows.push(['Currency', val('asset-h-currency')]);
     return rows;
   }
   function buildPricingSectionData(){
@@ -6601,27 +6597,27 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(agreementType === 'Outright Purchase'){
       out.push({heading:'Outright Purchase', cols:['Year','Price / RECs'], rows:[]});
       for(let i=1;i<=yearCount;i++){
-        out[0].rows.push([val('asset-y'+i+'-year'), feeVal('asset-y'+i+'-price').text]);
+        out[0].rows.push([val('asset-y'+i+'-year'), amountVal('asset-y'+i+'-price').text]);
       }
     } else if(agreementType === 'Self Manage'){
       out.push({heading:'Self Manage — one-time fees', cols:['Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
-        feeVal('asset-sm-device-reg-fee').text,
-        feeVal('asset-sm-recs-issuance-fee').text,
-        feeVal('asset-sm-redemption-fee').text
+        amountVal('asset-sm-device-reg-fee').text,
+        amountVal('asset-sm-recs-issuance-fee').text,
+        amountVal('asset-sm-redemption-fee').text
       ]]});
       out.push({heading:'Self Manage — yearly', cols:['Year','Service fee'], rows:[]});
       for(let i=1;i<=yearCount;i++){
         out[1].rows.push([
           val('asset-y'+i+'-year'),
-          feeVal('asset-y'+i+'-service-fee').text
+          amountVal('asset-y'+i+'-service-fee').text
         ]);
       }
     } else {
       out.push({heading:'Profit Sharing', cols:['Profit Ratio (Saxon : Device Owner)','Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
         val('asset-ps-ratio-saxon')+'% : '+val('asset-ps-ratio-owner')+'%',
-        feeVal('asset-ps-device-reg-fee').text,
-        feeVal('asset-ps-recs-issuance-fee').text,
-        feeVal('asset-ps-redemption-fee').text
+        amountVal('asset-ps-device-reg-fee').text,
+        amountVal('asset-ps-recs-issuance-fee').text,
+        amountVal('asset-ps-redemption-fee').text
       ]]});
     }
     return out;
@@ -7040,15 +7036,14 @@ async function saveAssetToLog(){
   const nowIso = new Date().toISOString();
   currentAssetSubmittedDate = nowIso;
   const v = (id) => { const el = document.getElementById(id); return el ? (el.value||'').trim() : ''; };
-  // Writes a fee's Currency/Amount pair into row[] at the mc keys
-  // "<key>Ccy"/"<key>Amt", reading from the DOM element pair "<domId>-ccy"/
-  // "<domId>-amt". Silently no-ops if the mc doesn't have that key (keeps
-  // this one function reusable across all 3 tables' differing fee sets).
-  const writeFee = (row, mcKeyBase, domId) => {
-    const ccyKey = mcKeyBase+'Ccy', amtKey = mcKeyBase+'Amt';
-    if(!(ccyKey in mc)) return;
-    const ccy = v(domId+'-ccy'), amt = v(domId+'-amt');
-    row[mc[ccyKey]] = amt ? ccy : '';
+  // Writes a fee's Amount into row[] at mc key "<key>Amt", reading from the
+  // DOM element "<domId>-amt". Silently no-ops if the mc doesn't have that
+  // key (keeps this one function reusable across all 3 tables' differing
+  // fee sets). Currency is no longer per-fee — see row[mc.currency] below.
+  const writeAmount = (row, mcKeyBase, domId) => {
+    const amtKey = mcKeyBase+'Amt';
+    if(!(amtKey in mc)) return;
+    const amt = v(domId+'-amt');
     row[mc[amtKey]] = amt ? Number(amt) : '';
   };
   const rowsToWrite = [];
@@ -7065,6 +7060,7 @@ async function saveAssetToLog(){
     row[mc.paymentTerm] = v('asset-h-payment-term');
     row[mc.broker] = v('asset-h-broker') || 'N/A';
     row[mc.bnmRate] = v('asset-h-bnm-rate');
+    row[mc.currency] = v('asset-h-currency');
     row[mc.specialRemarks] = v('asset-h-remarks') || 'N/A';
     row[mc.deviceOwnerName] = v('asset-p'+i+'-owner');
     row[mc.recIssuanceStart] = v('asset-p'+i+'-rec-start');
@@ -7073,24 +7069,24 @@ async function saveAssetToLog(){
     if(agreementType === 'Outright Purchase'){
       for(let y = 1; y <= yearCount; y++){
         const yearVal = v('asset-y'+y+'-year');
-        if(yearVal) writeFee(row, 'price'+yearVal, 'asset-y'+y+'-price');
+        if(yearVal) writeAmount(row, 'price'+yearVal, 'asset-y'+y+'-price');
       }
     } else if(agreementType === 'Self Manage'){
       for(let y = 1; y <= yearCount; y++){
         const yearVal = v('asset-y'+y+'-year');
         if(yearVal){
-          writeFee(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
+          writeAmount(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
         }
       }
-      writeFee(row, 'deviceRegFee', 'asset-sm-device-reg-fee');
-      writeFee(row, 'recsIssuanceFee', 'asset-sm-recs-issuance-fee');
-      writeFee(row, 'redemptionFee', 'asset-sm-redemption-fee');
+      writeAmount(row, 'deviceRegFee', 'asset-sm-device-reg-fee');
+      writeAmount(row, 'recsIssuanceFee', 'asset-sm-recs-issuance-fee');
+      writeAmount(row, 'redemptionFee', 'asset-sm-redemption-fee');
     } else { // Profit Sharing
       row[mc.profitRatioSaxon] = v('asset-ps-ratio-saxon');
       row[mc.profitRatioOwner] = v('asset-ps-ratio-owner');
-      writeFee(row, 'deviceRegFee', 'asset-ps-device-reg-fee');
-      writeFee(row, 'recsIssuanceFee', 'asset-ps-recs-issuance-fee');
-      writeFee(row, 'redemptionFee', 'asset-ps-redemption-fee');
+      writeAmount(row, 'deviceRegFee', 'asset-ps-device-reg-fee');
+      writeAmount(row, 'recsIssuanceFee', 'asset-ps-recs-issuance-fee');
+      writeAmount(row, 'redemptionFee', 'asset-ps-redemption-fee');
     }
 
     row[mc.pricingSummary] = window.assetGetPreview ? window.assetGetPreview().plain : '';
@@ -7143,9 +7139,12 @@ async function addAssetApprovalToList(agreementType, values){
   // column spec in the AssetTradeDealLog example workbook. This list is
   // shared across all 3 agreement types (it's one flat approval log), so
   // "Agreement Type" is passed in explicitly rather than read off `values`
-  // (which no longer has that column in the split tables). Profit Ratio is
-  // only meaningful for Profit Sharing rows — left blank otherwise. Add a
-  // line here any time a new column is added to that list.
+  // (which no longer has that column in the split tables). Currency is one
+  // shared field for the whole deal (values[mc.currency]) — there is no
+  // per-fee/per-year currency anymore. Profit Ratio, per-year Price/RECs,
+  // per-year Service Fee/RECs, and the 3 one-time fees are each only
+  // meaningful for their own type(s) — left blank on rows from the other
+  // type(s). Add a line here any time a new column is added to that list.
   const desiredByDisplayName = {
     'Title': values[mc.bdInCharge],
     'Asset ID (Assigned to BD)': values[mc.assetId],
@@ -7159,6 +7158,7 @@ async function addAssetApprovalToList(agreementType, values){
     'Payment Term': values[mc.paymentTerm],
     'Broker': values[mc.broker],
     'BNM Rate': values[mc.bnmRate],
+    'Currency': values[mc.currency],
     'Special Remarks': values[mc.specialRemarks],
     'Device Owner Name': values[mc.deviceOwnerName],
     'REC Issuance Start Date': values[mc.recIssuanceStart],
@@ -7173,6 +7173,27 @@ async function addAssetApprovalToList(agreementType, values){
     'Approved Date': values[mc.approvedDate3],
     'Row Uid': values[mc.rowUid]
   };
+  // Per-year pricing — Price/RECs (Outright Purchase) and Service Fee/RECs
+  // (Self Manage) share ONE column per year on this list rather than two
+  // parallel columns, since 'Agreement Type' above already tells you which
+  // of the two a given row's amount is. Blank for Profit Sharing, which has
+  // neither. Fixed 2020..2030 range mirrors the split Excel tables' own
+  // fixed-year columns. Amount only — currency is the single shared
+  // "Currency" field above.
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
+    let amt = '';
+    if(agreementType === 'Outright Purchase') amt = values[mc['price'+y+'Amt']];
+    else if(agreementType === 'Self Manage') amt = values[mc['service'+y+'Amt']];
+    desiredByDisplayName['RECs ' + y + ' Amount'] = amt;
+  }
+  // One-time fees — shared design between Self Manage and Profit Sharing
+  // (both have these 3 fees as a single whole-deal amount, not per-year);
+  // left blank for Outright Purchase, which has neither. Amount only, same
+  // reason as above.
+  const hasOneTimeFees = (agreementType === 'Self Manage' || agreementType === 'Profit Sharing');
+  desiredByDisplayName['Device Registration Fee Amount'] = hasOneTimeFees ? values[mc.deviceRegFeeAmt] : '';
+  desiredByDisplayName['RECs Issuance Fee Amount'] = hasOneTimeFees ? values[mc.recsIssuanceFeeAmt] : '';
+  desiredByDisplayName['Redemption Fee Amount'] = hasOneTimeFees ? values[mc.redemptionFeeAmt] : '';
   const fields = {};
   const skipped = [];
   Object.keys(desiredByDisplayName).forEach(displayName => {
