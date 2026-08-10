@@ -620,6 +620,23 @@
     <div id="admin-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
+  <div class="card" id="my-asset-history-card">
+    <p class="card-title">My saved asset agreements</p>
+    <div id="asset-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
+  </div>
+
+  <div class="card" id="asset-approval-queue-card" style="display:none;">
+    <p class="card-title">Asset approval queue</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every asset agreement currently pending at any approval level, across all three agreement types. Approve/Reject only appear on the rows waiting on your own level — the rest are visible for awareness only.</p>
+    <div id="asset-approval-queue-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
+  </div>
+
+  <div class="card" id="admin-asset-history-card">
+    <p class="card-title">All asset agreements</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every saved asset agreement across every user. You can open full details only for agreements you created (Admin/Super Admin can open any). Everyone else's agreements show as a read-only summary row.</p>
+    <div id="admin-asset-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
+  </div>
+
   </div><!-- /tab-panel-confirmations -->
 
   <div class="card" id="user-mgmt-card" style="display:none;">
@@ -666,7 +683,7 @@
 <div id="view-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(43,42,40,.45);z-index:1100;align-items:center;justify-content:center;padding:16px;">
   <div style="width:100%;max-width:900px;max-height:85vh;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;display:flex;flex-direction:column;gap:10px;">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-      <p class="card-title" style="margin:0;">Deal ID <span id="view-modal-dealid"></span></p>
+      <p class="card-title" style="margin:0;"><span id="view-modal-label">Deal ID</span> <span id="view-modal-dealid"></span></p>
       <div style="display:flex;align-items:center;gap:14px;">
         <span id="view-modal-agreement-link" style="font-size:13px;"></span>
         <button type="button" class="secondary" id="view-modal-edit" style="display:none;" title="Superadmin only - edit the recap details shown above">Edit details</button>
@@ -696,7 +713,7 @@
 
 <div id="reject-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(43,42,40,.45);z-index:1100;align-items:center;justify-content:center;padding:16px;">
   <div style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px 24px;display:flex;flex-direction:column;gap:10px;">
-    <h2 style="margin:0;font-size:16px;">Reject Deal ID <span id="reject-modal-dealid"></span></h2>
+    <h2 style="margin:0;font-size:16px;"><span id="reject-modal-label">Reject Deal ID</span> <span id="reject-modal-dealid"></span></h2>
     <p style="margin:0;font-size:13px;color:var(--text-secondary);">This comment is shown to the person who submitted the confirmation so they know what to fix.</p>
     <label style="margin:4px 0 0;">Comment (required)</label>
     <textarea id="reject-comment" placeholder="e.g. Price/REC doesn't match the agreed rate — please confirm and resubmit." style="min-height:90px;"></textarea>
@@ -1300,6 +1317,8 @@ function applyRoleUi(){
   // full details. Approval queue stays Admin/Super Admin-only, same as before.
   document.getElementById('admin-history-card').style.display = 'block';
   document.getElementById('approval-queue-card').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('admin-asset-history-card').style.display = 'block';
+  document.getElementById('asset-approval-queue-card').style.display = isAdmin ? 'block' : 'none';
   // The Form tab has nothing to show for review-only roles (Admin1/2/3),
   // since agreement-form-section is hidden for them above — so land those
   // roles on the Confirmations tab by default instead. Users/Superadmin
@@ -3248,6 +3267,7 @@ let viewModalHtml = '';
 let viewModalDealId = '';
 let viewModalGroup = [];
 function openViewModal(dealId, html, agreementUrl, group){
+  document.getElementById('view-modal-label').textContent = 'Deal ID';
   document.getElementById('view-modal-dealid').textContent = friendlyDealId(dealId);
   document.getElementById('view-modal-table').innerHTML = html;
   document.getElementById('view-modal-agreement-link').innerHTML = agreementUrl
@@ -3356,9 +3376,27 @@ document.getElementById('approve-modal-submit').addEventListener('click', async 
   }
 });
 let rejectModalDealId = null;
+// Set when the reject modal is opened for an Asset agreement (via
+// openAssetRejectModal) instead of a Trade deal (openRejectModal) — the
+// submit handler below branches on this to call rejectAssetDeal instead of
+// rejectDeal/rejectBdMatchChange. Reset in both open functions so it never
+// leaks from one type to the other.
+let rejectModalIsAsset = false;
 function openRejectModal(dealId){
+  rejectModalIsAsset = false;
   rejectModalDealId = dealId;
+  document.getElementById('reject-modal-label').textContent = 'Reject Deal ID';
   document.getElementById('reject-modal-dealid').textContent = friendlyDealId(dealId);
+  document.getElementById('reject-comment').value = '';
+  document.getElementById('reject-modal-error').style.display = 'none';
+  document.getElementById('reject-modal-overlay').style.display = 'flex';
+  document.getElementById('reject-comment').focus();
+}
+function openAssetRejectModal(assetId){
+  rejectModalIsAsset = true;
+  rejectModalDealId = assetId;
+  document.getElementById('reject-modal-label').textContent = 'Reject Asset ID';
+  document.getElementById('reject-modal-dealid').textContent = friendlyAssetId(assetId);
   document.getElementById('reject-comment').value = '';
   document.getElementById('reject-modal-error').style.display = 'none';
   document.getElementById('reject-modal-overlay').style.display = 'flex';
@@ -3367,6 +3405,7 @@ function openRejectModal(dealId){
 function closeRejectModal(){
   document.getElementById('reject-modal-overlay').style.display = 'none';
   rejectModalDealId = null;
+  rejectModalIsAsset = false;
 }
 document.getElementById('reject-modal-cancel').addEventListener('click', closeRejectModal);
 document.getElementById('reject-modal-overlay').addEventListener('click', (e)=>{
@@ -3374,13 +3413,17 @@ document.getElementById('reject-modal-overlay').addEventListener('click', (e)=>{
 });
 document.getElementById('reject-modal-submit').addEventListener('click', async ()=>{
   const dealId = rejectModalDealId;
+  const isAsset = rejectModalIsAsset;
   const reason = document.getElementById('reject-comment').value;
   const errEl = document.getElementById('reject-modal-error');
   const btn = document.getElementById('reject-modal-submit');
   errEl.style.display = 'none';
   btn.disabled = true;
   try{
-    if(submittedDealStatus(dealId) === STATUS_PENDING_CHANGE_3){
+    if(isAsset){
+      await rejectAssetDeal(dealId, reason);
+      refreshAssetQueueAndHistoryUi();
+    }else if(submittedDealStatus(dealId) === STATUS_PENDING_CHANGE_3){
       await rejectBdMatchChange(dealId, reason);
     }else{
       await rejectDeal(dealId, reason);
@@ -3763,6 +3806,38 @@ document.addEventListener('click', (e)=>{
   const fullEditBtn = e.target.closest('.history-full-edit-btn');
   if(fullEditBtn){
     openFullEditModal(fullEditBtn.getAttribute('data-dealid'));
+    return;
+  }
+  // ---- Asset agreement equivalents of the three buttons above. Asset has
+  // no BD-matching change-request flow and no post-approval edit flow (see
+  // the comment above approveAssetDeal), so there's no equivalent of the
+  // Pending-Change-3 branch, "Request edit", or "Edit & resend" buttons.
+  const assetViewBtn = e.target.closest('.asset-history-view-btn');
+  if(assetViewBtn){
+    const assetId = assetViewBtn.getAttribute('data-assetid');
+    const group = findAssetRowGroupInCache(assetId);
+    if(!group) return;
+    const withHtml = group.rows.find(r => r.values[0][group.mc.generatedHtml]);
+    if(!withHtml) return;
+    openAssetViewModal(assetId, withHtml.values[0][group.mc.generatedHtml], withHtml.values[0][group.mc.agreementFileUrl]);
+    return;
+  }
+  const assetApproveBtn = e.target.closest('.asset-history-approve-btn');
+  if(assetApproveBtn){
+    const assetId = assetApproveBtn.getAttribute('data-assetid');
+    const confirmLabel = isPendingAssetId(assetId) ? 'this asset agreement' : 'Asset ID ' + friendlyAssetId(assetId);
+    if(confirm('Approve ' + confirmLabel + ' at your level? This will advance it to the next stage (or mark it fully Approved if this is the final level).')){
+      assetApproveBtn.disabled = true;
+      approveAssetDeal(assetId)
+        .then(()=> refreshAssetQueueAndHistoryUi())
+        .catch(err=>{ console.error('Asset approve failed', err); alert('Approve failed: ' + err.message); })
+        .finally(()=>{ assetApproveBtn.disabled = false; });
+    }
+    return;
+  }
+  const assetRejectBtn = e.target.closest('.asset-history-reject-btn');
+  if(assetRejectBtn){
+    openAssetRejectModal(assetRejectBtn.getAttribute('data-assetid'));
   }
 });
 
@@ -6947,7 +7022,7 @@ function findAssetRowGroupInCache(assetId){
     const rows = (assetLogRowsCache[type] || [])
       .filter(r => String(r.values[0][mc.assetId] || '').trim() === assetId)
       .sort((a,b)=> a.index - b.index);
-    if(rows.length) return { type, rows };
+    if(rows.length) return { type, mc, rows };
   }
   return null;
 }
@@ -6968,10 +7043,12 @@ function checkAssetSubmittedLock(){
 async function loadAssetDraftAndHistory(){
   if(!canBuildAgreement()){
     await loadAllAssetLogTables();
+    refreshAssetQueueAndHistoryUi();
     return;
   }
   setAssetDraftStatus('Loading…');
   await loadAllAssetLogTables();
+  refreshAssetQueueAndHistoryUi();
   try{
     const rows = await getTableRows(ASSET_DRAFT_TABLE_NAME);
     const myEmail = (currentAccount.username || '').toLowerCase();
@@ -6988,6 +7065,141 @@ async function loadAssetDraftAndHistory(){
     setAssetDraftStatus('Could not load draft: ' + err.message);
   }
   checkAssetSubmittedLock();
+}
+// ---- Asset approval queue / history rendering ----
+// Mirrors loadHistory()/renderHistoryTable() for Trade deals, but reads
+// from the 3-table assetLogRowsCache instead of one LOG_TABLE_NAME, and
+// skips everything Asset doesn't have: BD source matching change requests,
+// Registry/Tech confirmation flags, the post-approval "Request edit"/"Edit &
+// resend" flows, and Level 2's file-attachment requirement (see the comment
+// above approveAssetDeal). Every row group is one Asset ID's product rows
+// within a single split table (Outright Purchase / Self Manage / Profit
+// Sharing) — Asset ID is unique across all three, so a group never spans
+// more than one table.
+function assetApprovalTrailText(v, mc){
+  const parts = [];
+  if(v[mc.approvedBy1]) parts.push('<span title="'+escapeHtml(v[mc.approvedBy1])+'">L1 ✓</span>');
+  if(v[mc.approvedBy2]) parts.push('<span title="'+escapeHtml(v[mc.approvedBy2])+'">L2 ✓</span>');
+  if(v[mc.approvedBy3]) parts.push('<span title="'+escapeHtml(v[mc.approvedBy3])+'">L3 ✓</span>');
+  return parts.join(' · ');
+}
+// Groups one table's cached rows by Asset ID, attaching the agreement type
+// and column map to each group so the renderer doesn't need to re-derive
+// them per row.
+function groupAssetRowsByType(type){
+  const mc = ASSET_MC_BY_TYPE[type];
+  const rows = assetLogRowsCache[type] || [];
+  const groups = {};
+  const order = [];
+  rows.forEach(r=>{
+    const id = String(r.values[0][mc.assetId] || '').trim();
+    if(!groups[id]){ groups[id] = []; order.push(id); }
+    groups[id].push(r);
+  });
+  return order.map(id => ({ assetId: id, type, mc, rows: groups[id] }));
+}
+// Combines all 3 split tables' groups into one list, sorted newest-first by
+// submitted date (same ordering loadHistory() uses for Trade deals).
+function buildAllAssetGroups(){
+  const all = [];
+  ASSET_ALL_TYPES.forEach(type => { all.push(...groupAssetRowsByType(type)); });
+  return all.sort((a,b)=>{
+    const av = a.rows[0].values[0][a.mc.submittedDate] || '';
+    const bv = b.rows[0].values[0][b.mc.submittedDate] || '';
+    return String(bv).localeCompare(String(av));
+  });
+}
+function renderAssetHistoryTable(el, groups, opts){
+  opts = opts || {};
+  const showOwner = !!opts.showOwner;
+  const showActions = !!opts.showActions;
+  const colCount = showOwner ? 7 : 6;
+  if(!groups.length){
+    el.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">'+escapeHtml(opts.emptyText || 'No saved asset agreements yet.')+'</p>';
+    return;
+  }
+  let html = '<table><tr>' + (showOwner ? '<th style="text-align:left;padding:6px;">BD in-charge</th>' : '') +
+    '<th style="text-align:left;padding:6px;">Asset ID</th>' +
+    '<th style="text-align:left;padding:6px;">Type</th>' +
+    '<th style="text-align:left;padding:6px;">Entity</th>' +
+    '<th style="text-align:left;padding:6px;">Products</th>' +
+    '<th style="text-align:left;padding:6px;">Status</th>' +
+    '<th style="padding:6px;"></th></tr>';
+  const restrictOthers = !!opts.restrictOthers;
+  const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
+  groups.forEach(g=>{
+    const mc = g.mc;
+    const v = g.rows[0].values[0];
+    const status = v[mc.status] || STATUS_PENDING_1;
+    const ownerEmail = (v[mc.submittedBy] || '').toLowerCase();
+    const isOwnerOrAdmin = isAdmin || (ownerEmail && ownerEmail === myEmailLower);
+    if(restrictOthers && !isOwnerOrAdmin){
+      html += '<tr class="confirmation-row-restricted" style="border-top:1px solid var(--border);">' +
+        (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[mc.bdInCharge]||'')+'</td>' : '') +
+        '<td style="padding:6px;">'+(isPendingAssetId(g.assetId) ? '-' : escapeHtml(friendlyAssetId(g.assetId)))+'</td>' +
+        '<td style="padding:6px;">'+escapeHtml(g.type)+'</td>' +
+        '<td style="padding:6px;">'+escapeHtml(v[mc.entity]||'')+'</td>' +
+        '<td style="padding:6px;">—</td>' +
+        '<td style="padding:6px;">'+statusBadge(status)+'</td>' +
+        '<td style="padding:6px;white-space:nowrap;"><span class="row-lock-note">Owner only</span></td>' +
+      '</tr>';
+      return;
+    }
+    const canAct = showActions && canActOnStatus(status);
+    const trail = assetApprovalTrailText(v, mc);
+    html += '<tr style="border-top:1px solid var(--border);">' +
+      (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[mc.bdInCharge]||'')+'</td>' : '') +
+      '<td style="padding:6px;">'+(isPendingAssetId(g.assetId) ? '-' : escapeHtml(friendlyAssetId(g.assetId)))+'</td>' +
+      '<td style="padding:6px;">'+escapeHtml(g.type)+'</td>' +
+      '<td style="padding:6px;">'+escapeHtml(v[mc.entity]||'')+'</td>' +
+      '<td style="padding:6px;">'+g.rows.length+'</td>' +
+      '<td style="padding:6px;">'+statusBadge(status)+
+        (trail ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+trail+'</div>' : '')+
+      '</td>' +
+      '<td style="padding:6px;white-space:nowrap;">' +
+        '<button type="button" class="secondary asset-history-view-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">View</button>' +
+        (canAct ? ' <button type="button" class="secondary asset-history-approve-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">Approve</button>' +
+                  ' <button type="button" class="secondary asset-history-reject-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;color:#8a2d1f;border-color:#c1493a;">Reject</button>' : '') +
+      '</td>' +
+    '</tr>';
+    if(status === STATUS_REJECTED && v[mc.rejectReason]){
+      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
+        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+        '<strong>Rejected'+(v[mc.rejectedBy]?(' by '+escapeHtml(v[mc.rejectedBy])):'')+':</strong> '+escapeHtml(v[mc.rejectReason]) +
+        '</div></td></tr>';
+    }
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+function refreshAssetQueueAndHistoryUi(){
+  const allGroups = buildAllAssetGroups();
+  const myEmail = (currentAccount && currentAccount.username || '').toLowerCase();
+  const mineGroups = allGroups.filter(g => (String(g.rows[0].values[0][g.mc.submittedBy] || '')).toLowerCase() === myEmail);
+  const myListEl = document.getElementById('asset-history-list');
+  if(myListEl) renderAssetHistoryTable(myListEl, mineGroups, {showOwner:false, showActions:false});
+
+  const adminListEl = document.getElementById('admin-asset-history-list');
+  if(adminListEl) renderAssetHistoryTable(adminListEl, allGroups, {showOwner:true, showActions:false, restrictOthers:true});
+
+  if(isAdmin){
+    const queueEl = document.getElementById('asset-approval-queue-list');
+    if(queueEl){
+      const queueGroups = allGroups.filter(g => PENDING_STATUSES.includes(g.rows[0].values[0][g.mc.status] || STATUS_PENDING_1));
+      renderAssetHistoryTable(queueEl, queueGroups, {showOwner:true, showActions:true, emptyText:'Nothing pending right now.'});
+    }
+  }
+}
+// View-only modal for an Asset agreement — reuses the same overlay/table
+// DOM as the Trade "View" modal, but passes no row group (so the
+// superadmin-only "Edit details" button, which is wired to Trade's recap
+// editor, stays hidden) and relabels the header from "Deal ID" to "Asset
+// ID". Asset has no post-approval BD-matching refresh step, so the stored
+// HTML is shown as-is.
+function openAssetViewModal(assetId, html, agreementUrl){
+  openViewModal(assetId, html, agreementUrl, []);
+  document.getElementById('view-modal-label').textContent = 'Asset ID';
+  document.getElementById('view-modal-dealid').textContent = friendlyAssetId(assetId);
 }
 document.addEventListener('input', ()=>{
   if(!currentAccount || suppressAssetAutosave || !canBuildAgreement()) return;
@@ -7293,7 +7505,10 @@ async function approveAssetDeal(assetId){
   }
 }
 async function rejectAssetDeal(assetId, reason){
-  if(!assetId || !reason) return;
+  if(!assetId) return;
+  const trimmedReason = (reason||'').trim();
+  if(!trimmedReason) throw new Error('A comment is required so the submitter knows why this was rejected.');
+  reason = trimmedReason;
   const group = await findAssetRowGroupLive(assetId);
   if(!group) return;
   const { tableName, mc, rows: matching } = group;
