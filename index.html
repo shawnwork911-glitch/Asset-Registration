@@ -923,12 +923,13 @@ const DEAL_ID_START_KEY = "dealIdStart";
 // Then, per table:
 //   AssetTradeDealLog_OutrightPurchase adds: Price/RECs <Currency><Amount>
 //     for each fixed year 2020..2030 (22 columns).
-//   AssetTradeDealLog_SelfManage adds: Price/RECs <Currency><Amount> for
-//     each fixed year 2020..2030 (22 cols) + Service Fee/RECs <Currency>
-//     <Amount> for each fixed year 2020..2030 (22 cols) + Device
-//     Registration Fee / RECs Issuance Fee / Redemption Fee, each as a
-//     ONE-TIME <Currency><Amount> pair for the whole deal (6 cols) — these
-//     3 fees are shared-design with Profit Sharing, not per-year.
+//   AssetTradeDealLog_SelfManage adds: Service Fee/RECs <Currency><Amount>
+//     for each fixed year 2020..2030 (22 cols) + Device Registration Fee /
+//     RECs Issuance Fee / Redemption Fee, each as a ONE-TIME <Currency>
+//     <Amount> pair for the whole deal (6 cols) — these 3 fees are
+//     shared-design with Profit Sharing, not per-year. (Self Manage
+//     originally also had per-year Price/RECs columns; those were dropped
+//     from the sheet, so this table no longer carries them.)
 //   AssetTradeDealLog_ProfitSharing adds: Profit Ratio - Saxon (%), Profit
 //     Ratio - Device Owner (%), then the same 3 one-time fees as Self
 //     Manage (6 cols).
@@ -966,7 +967,7 @@ function buildAssetColMap(pricingKeys){
 }
 const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'));
 const ASSET_MC_SM = buildAssetColMap(
-  assetYearFeeKeys('price').concat(assetYearFeeKeys('service'), ASSET_ONETIME_FEE_KEYS)
+  assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS)
 );
 const ASSET_MC_PS = buildAssetColMap(
   ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS)
@@ -6407,8 +6408,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         (yearCount>1 ? '<button type="button" class="remove-row-btn" data-remove-asset-year="'+i+'">Remove</button>' : '')+
         '<p class="trade-title">Year '+i+'</p>'+
         '<div class="grid">'+
-          fieldHtml('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year-wrap')+
+          fieldHtml('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year-wrap');
+      if(agreementType !== 'Self Manage'){
+        html +=
           fieldHtml('Price / RECs', feeInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-wrap');
+      }
       if(agreementType === 'Self Manage'){
         html +=
           fieldHtml('Service fee / RECs', feeInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap');
@@ -6532,8 +6536,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
             else{ seenYears[y] = i; }
           }
         }
-        const price = feeVal('asset-y'+i+'-price');
-        if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price'); }
+        if(agreementType !== 'Self Manage'){
+          const price = feeVal('asset-y'+i+'-price');
+          if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price'); }
+        }
         if(agreementType === 'Self Manage'){
           const svc = feeVal('asset-y'+i+'-service-fee');
           if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee'); }
@@ -6603,11 +6609,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         feeVal('asset-sm-recs-issuance-fee').text,
         feeVal('asset-sm-redemption-fee').text
       ]]});
-      out.push({heading:'Self Manage — yearly', cols:['Year','Price / RECs','Service fee'], rows:[]});
+      out.push({heading:'Self Manage — yearly', cols:['Year','Service fee'], rows:[]});
       for(let i=1;i<=yearCount;i++){
         out[1].rows.push([
           val('asset-y'+i+'-year'),
-          feeVal('asset-y'+i+'-price').text,
           feeVal('asset-y'+i+'-service-fee').text
         ]);
       }
@@ -7074,7 +7079,6 @@ async function saveAssetToLog(){
       for(let y = 1; y <= yearCount; y++){
         const yearVal = v('asset-y'+y+'-year');
         if(yearVal){
-          writeFee(row, 'price'+yearVal, 'asset-y'+y+'-price');
           writeFee(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
         }
       }
