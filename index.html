@@ -895,37 +895,98 @@ const DEAL_ID_START_KEY = "dealIdStart";
    TradeUserRoles table, getUserRole/canActOnStatus/actionableStatusesForRole
    below are reused as-is), so only the three data tables and one SharePoint
    list are new. ---- */
-const ASSET_LOG_TABLE_NAME = "AssetTradeDealLog";
-// One physical row per PRODUCT (a multi-product agreement writes several
-// rows sharing the same Asset ID) — same one-row-per-line-item convention
-// as TradeDealLog. Create the Excel Table with these 37 columns in exactly
-// this order: BD In Charge, Asset ID, Entity, Agreement Type, Agreement
-// Start Date, Agreement End Date, Supplier, Registry, Device Status,
-// Payment Term, Broker, BNM Rate, Special Remarks, Device Owner Name,
-// REC Issuance Start Date, COD, Profit Ratio - Saxon (%),
-// Profit Ratio - Device Owner (%), Pricing Summary, Submitted By,
-// Submitted Date, Generated HTML, Status, Approved By (Level 1),
-// Approved Date (Level 1), Approved By (Level 2), Approved Date (Level 2),
-// Approved By (Level 3), Approved Date (Level 3), Rejected By,
-// Rejected Date, Rejection Comment, Agreement File Name,
-// Agreement File URL, Description, Row Uid, Approved List Item Id.
-// NOTE: same rule as TradeDealLog — add any future column at the END only,
-// or every index below will point at the wrong data. There is currently NO
-// post-approval correction workflow for Asset (no "Pending ..." staging
-// columns) — a saved/approved row is final.
-const ASSET_MC = {
-  bdInCharge:0, assetId:1, entity:2, agreementType:3,
-  agreementStart:4, agreementEnd:5, supplier:6, registry:7,
-  deviceStatus:8, paymentTerm:9, broker:10, bnmRate:11, specialRemarks:12,
-  deviceOwnerName:13, recIssuanceStart:14, cod:15,
-  profitRatioSaxon:16, profitRatioOwner:17, pricingSummary:18,
-  submittedBy:19, submittedDate:20, generatedHtml:21, status:22,
-  approvedBy1:23, approvedDate1:24, approvedBy2:25, approvedDate2:26,
-  approvedBy3:27, approvedDate3:28, rejectedBy:29, rejectedDate:30,
-  rejectReason:31, agreementFileName:32, agreementFileUrl:33,
-  description:34, rowUid:35, approvedListItemId:36
+// Asset Trade Deal Log is split into THREE separate real Excel Tables, one
+// per agreement type, instead of one shared table — each type's pricing
+// shape is different enough (fixed-year columns for Outright Purchase /
+// Self Manage vs one-time fees for Profit Sharing) that cramming them into
+// one generic table meant most rows had a wall of unused/blank cells. Asset
+// ID stays GLOBALLY unique across all three tables (see assignFormalAssetId
+// below, which scans all three).
+// One physical row per PRODUCT in every table (a multi-product agreement
+// writes several rows sharing the same Asset ID) — same one-row-per-line-
+// item convention as TradeDealLog. NOTE: same rule as TradeDealLog — add
+// any future column at the END only, or every index below will point at
+// the wrong data. There is currently NO post-approval correction workflow
+// for Asset (no "Pending ..." staging columns) — a saved/approved row is
+// final.
+//
+// Every fee is stored as TWO columns — "<Fee> Currency" (text: USD/SGD/RM)
+// and "<Fee> Amount" (number) — instead of one combined text column, so the
+// amount can be summed/charted directly in Excel.
+//
+// Shared columns (same in all 3 tables, in this order):
+//   BD In Charge, Asset ID, Entity, Agreement Start Date, Agreement End
+//   Date, Supplier, Registry, Device Status, Payment Term, Broker, BNM
+//   Rate, Special Remarks, Device Owner Name, REC Issuance Start Date, COD.
+//   (There is deliberately NO "Agreement Type" column — the table itself,
+//   i.e. which of the 3 tables a row lives in, already tells you the type.)
+// Then, per table:
+//   AssetTradeDealLog_OutrightPurchase adds: Price/RECs <Currency><Amount>
+//     for each fixed year 2020..2030 (22 columns).
+//   AssetTradeDealLog_SelfManage adds: Price/RECs <Currency><Amount> for
+//     each fixed year 2020..2030 (22 cols) + Service Fee/RECs <Currency>
+//     <Amount> for each fixed year 2020..2030 (22 cols) + Device
+//     Registration Fee / RECs Issuance Fee / Redemption Fee, each as a
+//     ONE-TIME <Currency><Amount> pair for the whole deal (6 cols) — these
+//     3 fees are shared-design with Profit Sharing, not per-year.
+//   AssetTradeDealLog_ProfitSharing adds: Profit Ratio - Saxon (%), Profit
+//     Ratio - Device Owner (%), then the same 3 one-time fees as Self
+//     Manage (6 cols).
+// Then every table ends with the same tail columns:
+//   Pricing Summary, Submitted By, Submitted Date, Generated HTML, Status,
+//   Approved By (Level 1), Approved Date (Level 1), Approved By (Level 2),
+//   Approved Date (Level 2), Approved By (Level 3), Approved Date (Level
+//   3), Rejected By, Rejected Date, Rejection Comment, Agreement File
+//   Name, Agreement File URL, Description, Row Uid, Approved List Item Id.
+const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
+const ASSET_SHARED_KEYS = [
+  'bdInCharge','assetId','entity','agreementStart','agreementEnd','supplier',
+  'registry','deviceStatus','paymentTerm','broker','bnmRate','specialRemarks',
+  'deviceOwnerName','recIssuanceStart','cod'
+];
+const ASSET_TAIL_KEYS = [
+  'pricingSummary','submittedBy','submittedDate','generatedHtml','status',
+  'approvedBy1','approvedDate1','approvedBy2','approvedDate2',
+  'approvedBy3','approvedDate3','rejectedBy','rejectedDate','rejectReason',
+  'agreementFileName','agreementFileUrl','description','rowUid','approvedListItemId'
+];
+function assetYearFeeKeys(prefix){
+  const keys = [];
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'Ccy', prefix+y+'Amt'); }
+  return keys;
+}
+const ASSET_ONETIME_FEE_KEYS = [
+  'deviceRegFeeCcy','deviceRegFeeAmt','recsIssuanceFeeCcy','recsIssuanceFeeAmt',
+  'redemptionFeeCcy','redemptionFeeAmt'
+];
+function buildAssetColMap(pricingKeys){
+  const map = {};
+  ASSET_SHARED_KEYS.concat(pricingKeys, ASSET_TAIL_KEYS).forEach((k,i)=>{ map[k] = i; });
+  return map;
+}
+const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'));
+const ASSET_MC_SM = buildAssetColMap(
+  assetYearFeeKeys('price').concat(assetYearFeeKeys('service'), ASSET_ONETIME_FEE_KEYS)
+);
+const ASSET_MC_PS = buildAssetColMap(
+  ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS)
+);
+const ASSET_TABLE_BY_TYPE = {
+  'Outright Purchase': 'AssetTradeDealLog_OutrightPurchase',
+  'Self Manage': 'AssetTradeDealLog_SelfManage',
+  'Profit Sharing': 'AssetTradeDealLog_ProfitSharing'
 };
-const ASSET_COL_COUNT = 37;
+const ASSET_MC_BY_TYPE = {
+  'Outright Purchase': ASSET_MC_OP,
+  'Self Manage': ASSET_MC_SM,
+  'Profit Sharing': ASSET_MC_PS
+};
+const ASSET_COL_COUNT_BY_TYPE = {
+  'Outright Purchase': Object.keys(ASSET_MC_OP).length,
+  'Self Manage': Object.keys(ASSET_MC_SM).length,
+  'Profit Sharing': Object.keys(ASSET_MC_PS).length
+};
+const ASSET_ALL_TYPES = Object.keys(ASSET_TABLE_BY_TYPE);
 const ASSET_DRAFT_TABLE_NAME = "AssetTradeDealDrafts";  // must match the Excel Table name you create
 // Same shape as TradeDealDrafts: one row per user's in-progress Asset form.
 // Create the Excel Table with these 3 columns: Username, Draft JSON,
@@ -1043,7 +1104,8 @@ let suppressAutosave = false;  // true while programmatically filling the form f
 let currentAssetDocId = null;        // this session's Asset ID or its PND_ placeholder
 let currentAssetSubmittedDate = null;
 let assetDraftRowIndex = null;       // this user's row index in AssetTradeDealDrafts, or null
-let assetLogRowsCache = [];          // last-fetched rows from AssetTradeDealLog
+let assetLogRowsCache = { 'Outright Purchase':[], 'Self Manage':[], 'Profit Sharing':[] };
+                                      // last-fetched rows, keyed by agreement type / table
 let assetSettingsCache = [];
 let assetIdStartOverride = 0;        // 0 = no override, use the normal max+1 behavior
 let assetApprovedListId = null;
@@ -6255,10 +6317,29 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   function renderPricingSection(){
     const titleEl = document.getElementById('asset-pricing-card-title');
     const body = document.getElementById('asset-pricing-body');
-    if(agreementType === 'Outright Purchase' || agreementType === 'Self Manage'){
+    if(agreementType === 'Outright Purchase'){
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
         '<div class="trade-count-row">'+
+          '<label style="margin:0;">Number of years</label>'+
+          '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
+        '</div>'+
+        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
+      document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
+      renderYearRows();
+    } else if(agreementType === 'Self Manage'){
+      // Device registration fee / RECs issuance fee / Redemption fee are
+      // ONE-TIME for the whole deal (shared design with Profit Sharing) —
+      // rendered once above the per-year rows, which now only cover
+      // Price/RECs and Service fee.
+      titleEl.textContent = 'Pricing & Fees — ' + agreementType;
+      body.innerHTML =
+        '<div class="grid">'+
+          fieldHtml('Device registration fee (one-time)', feeInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-wrap')+
+          fieldHtml('RECs issuance fee (one-time)', feeInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-wrap')+
+          fieldHtml('Redemption fee (one-time)', feeInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-wrap')+
+        '</div>'+
+        '<div class="trade-count-row" style="margin-top:16px;">'+
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
@@ -6309,7 +6390,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   function renderYearRows(){
     const container = document.getElementById('asset-year-rows');
     if(!container) return;
-    const prevYear = {}, prevPrice = {}, prevSvc = {}, prevReg = {}, prevIss = {}, prevRed = {};
+    const prevYear = {}, prevPrice = {}, prevSvc = {};
     for(let i=1;i<=50;i++){
       const yEl = document.getElementById('asset-y'+i+'-year');
       if(!yEl) continue;
@@ -6317,9 +6398,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       prevPrice[i] = feeVal('asset-y'+i+'-price');
       if(agreementType === 'Self Manage'){
         prevSvc[i] = feeVal('asset-y'+i+'-service-fee');
-        prevReg[i] = feeVal('asset-y'+i+'-device-reg-fee');
-        prevIss[i] = feeVal('asset-y'+i+'-recs-issuance-fee');
-        prevRed[i] = feeVal('asset-y'+i+'-redemption-fee');
       }
     }
     let html = '';
@@ -6333,10 +6411,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           fieldHtml('Price / RECs', feeInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-wrap');
       if(agreementType === 'Self Manage'){
         html +=
-          fieldHtml('Service fee / RECs', feeInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap')+
-          fieldHtml('Device registration fee', feeInput('asset-y'+i+'-device-reg-fee', prevReg[i]), 'asset-y'+i+'-device-reg-fee-wrap')+
-          fieldHtml('RECs issuance fee', feeInput('asset-y'+i+'-recs-issuance-fee', prevIss[i]), 'asset-y'+i+'-recs-issuance-fee-wrap')+
-          fieldHtml('Redemption fee', feeInput('asset-y'+i+'-redemption-fee', prevRed[i]), 'asset-y'+i+'-redemption-fee-wrap');
+          fieldHtml('Service fee / RECs', feeInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap');
       }
       html += '</div></div>';
     }
@@ -6346,7 +6421,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const fromYear = document.getElementById('asset-y'+fromIdx+'-year');
     const toYear = document.getElementById('asset-y'+toIdx+'-year');
     if(fromYear && toYear) toYear.value = fromYear.value;
-    ['price','service-fee','device-reg-fee','recs-issuance-fee','redemption-fee'].forEach(suffix=>{
+    ['price','service-fee'].forEach(suffix=>{
       const fromCcy = document.getElementById('asset-y'+fromIdx+'-'+suffix+'-ccy');
       const toCcy = document.getElementById('asset-y'+toIdx+'-'+suffix+'-ccy');
       const fromAmt = document.getElementById('asset-y'+fromIdx+'-'+suffix+'-amt');
@@ -6460,11 +6535,17 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         const price = feeVal('asset-y'+i+'-price');
         if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price'); }
         if(agreementType === 'Self Manage'){
-          [['service-fee','Service fee'],['device-reg-fee','Device registration fee'],['recs-issuance-fee','RECs issuance fee'],['redemption-fee','Redemption fee']].forEach(([suffix,label])=>{
-            const f = feeVal('asset-y'+i+'-'+suffix);
-            if(!f.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — '+label}); markMissing('asset-y'+i+'-'+suffix); }
-          });
+          const svc = feeVal('asset-y'+i+'-service-fee');
+          if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee'); }
         }
+      }
+      if(agreementType === 'Self Manage'){
+        // One-time fees, shared design with Profit Sharing — validated once
+        // for the whole deal, not per-year.
+        [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee']].forEach(([id,label])=>{
+          const f = feeVal(id);
+          if(!f.amt){ missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id); }
+        });
       }
     } else {
       if(!val('asset-ps-ratio-saxon')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Saxon (%)'}); markMissing('asset-ps-ratio-saxon'); }
@@ -6517,15 +6598,17 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         out[0].rows.push([val('asset-y'+i+'-year'), feeVal('asset-y'+i+'-price').text]);
       }
     } else if(agreementType === 'Self Manage'){
-      out.push({heading:'Self Manage', cols:['Year','Price / RECs','Service fee','Device registration fee','RECs issuance fee','Redemption fee'], rows:[]});
+      out.push({heading:'Self Manage — one-time fees', cols:['Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
+        feeVal('asset-sm-device-reg-fee').text,
+        feeVal('asset-sm-recs-issuance-fee').text,
+        feeVal('asset-sm-redemption-fee').text
+      ]]});
+      out.push({heading:'Self Manage — yearly', cols:['Year','Price / RECs','Service fee'], rows:[]});
       for(let i=1;i<=yearCount;i++){
-        out[0].rows.push([
+        out[1].rows.push([
           val('asset-y'+i+'-year'),
           feeVal('asset-y'+i+'-price').text,
-          feeVal('asset-y'+i+'-service-fee').text,
-          feeVal('asset-y'+i+'-device-reg-fee').text,
-          feeVal('asset-y'+i+'-recs-issuance-fee').text,
-          feeVal('asset-y'+i+'-redemption-fee').text
+          feeVal('asset-y'+i+'-service-fee').text
         ]);
       }
     } else {
@@ -6756,12 +6839,18 @@ function assignPendingAssetId(){
   return placeholder;
 }
 async function assignFormalAssetId(placeholderId, productCount){
+  // Asset ID must stay globally unique across all 3 split tables, so every
+  // scan pulls all three and merges them before computing the next number.
   const scan = async () => {
-    const rows = await getTableRows(ASSET_LOG_TABLE_NAME);
+    const allRows = [];
+    for(const type of ASSET_ALL_TYPES){
+      const rows = await getTableRows(ASSET_TABLE_BY_TYPE[type]);
+      const mc = ASSET_MC_BY_TYPE[type];
+      rows.forEach(r => allRows.push(String(r.values[0][mc.assetId] || '').trim()));
+    }
     let maxNum = 0;
     const takenNums = new Set();
-    rows.forEach(r=>{
-      const raw = String(r.values[0][ASSET_MC.assetId] || '').trim();
+    allRows.forEach(raw=>{
       if(isPendingAssetId(raw)) return;
       const n = parseInt(raw.slice(0,5), 10);
       if(!isNaN(n)){
@@ -6831,31 +6920,57 @@ function applyAssetDraftData(data){
   currentAssetSubmittedDate = data.submittedDate || null;
   suppressAssetAutosave = false;
 }
+/* ---- Loads all 3 split tables into assetLogRowsCache (keyed by agreement
+   type). Any lookup that needs to find an Asset ID without already knowing
+   its agreement type (locks, approve/reject, ID assignment) must search
+   across all three — findAssetRowGroupInCache does that. ---- */
+async function loadAllAssetLogTables(){
+  const next = {};
+  for(const type of ASSET_ALL_TYPES){
+    try{
+      next[type] = await getTableRows(ASSET_TABLE_BY_TYPE[type]);
+    }catch(err){
+      console.error('Could not load ' + ASSET_TABLE_BY_TYPE[type], err);
+      next[type] = [];
+    }
+  }
+  assetLogRowsCache = next;
+}
+// Returns { type, rows } for the first agreement type whose cached table has
+// rows matching assetId, sorted by row index — or null if not found in any
+// of the 3 cached tables.
+function findAssetRowGroupInCache(assetId){
+  if(!assetId) return null;
+  for(const type of ASSET_ALL_TYPES){
+    const mc = ASSET_MC_BY_TYPE[type];
+    const rows = (assetLogRowsCache[type] || [])
+      .filter(r => String(r.values[0][mc.assetId] || '').trim() === assetId)
+      .sort((a,b)=> a.index - b.index);
+    if(rows.length) return { type, rows };
+  }
+  return null;
+}
 function assetAlreadySubmitted(assetId){
-  return !!(assetId && assetLogRowsCache.some(r => String(r.values[0][ASSET_MC.assetId] || '').trim() === assetId));
+  return !!(assetId && findAssetRowGroupInCache(assetId));
 }
 function checkAssetSubmittedLock(){
   const saveBtn = document.getElementById('asset-save-btn');
   const locked = assetAlreadySubmitted(currentAssetDocId);
   if(saveBtn) saveBtn.disabled = locked;
   if(locked){
-    const rows = assetLogRowsCache.filter(r => String(r.values[0][ASSET_MC.assetId] || '').trim() === currentAssetDocId);
-    const status = rows.length ? rows[0].values[0][ASSET_MC.status] : '';
+    const group = findAssetRowGroupInCache(currentAssetDocId);
+    const mc = ASSET_MC_BY_TYPE[group.type];
+    const status = group.rows[0].values[0][mc.status];
     setAssetDraftStatus('Already submitted (' + friendlyAssetId(currentAssetDocId) + ') — status: ' + status + '. Use Reset data to start a new agreement.');
   }
 }
 async function loadAssetDraftAndHistory(){
   if(!canBuildAgreement()){
-    try{ assetLogRowsCache = await getTableRows(ASSET_LOG_TABLE_NAME); }catch(err){ console.error('Could not load AssetTradeDealLog', err); }
+    await loadAllAssetLogTables();
     return;
   }
   setAssetDraftStatus('Loading…');
-  try{
-    assetLogRowsCache = await getTableRows(ASSET_LOG_TABLE_NAME);
-  }catch(err){
-    console.error('Could not load AssetTradeDealLog', err);
-    assetLogRowsCache = [];
-  }
+  await loadAllAssetLogTables();
   try{
     const rows = await getTableRows(ASSET_DRAFT_TABLE_NAME);
     const myEmail = (currentAccount.username || '').toLowerCase();
@@ -6887,7 +7002,8 @@ document.addEventListener('change', ()=>{
   window._assetDraftSaveTimer = setTimeout(saveAssetDraft, 1200);
 });
 
-/* ---- Save agreement: writes one row per product into AssetTradeDealLog ---- */
+/* ---- Save agreement: writes one row per product into whichever of the 3
+   split tables matches the current agreement type. ---- */
 async function saveAssetToLog(){
   if(!currentAccount) return;
   const missing = window.assetValidateForm ? window.assetValidateForm() : [];
@@ -6899,60 +7015,97 @@ async function saveAssetToLog(){
   if(assetAlreadySubmitted(assetId)){
     throw new Error((isPendingAssetId(assetId) ? 'This agreement' : 'Asset ID ' + assetId) + ' has already been submitted and cannot be resaved. Use Reset data to start a new agreement instead.');
   }
-  const liveColumnCount = await getTableColumnCount(ASSET_LOG_TABLE_NAME);
-  if(liveColumnCount < ASSET_COL_COUNT){
-    throw new Error('The AssetTradeDealLog table in SharePoint hasn\'t been fully set up yet — it needs all ' + ASSET_COL_COUNT + ' columns from the AssetTradeDealLog example. Ask an admin to add the missing columns, then try again.');
+  const state = window.assetGetState ? window.assetGetState() : { agreementType:'Outright Purchase', yearCount:1, productCount:1 };
+  const agreementType = state.agreementType;
+  const tableName = ASSET_TABLE_BY_TYPE[agreementType];
+  const mc = ASSET_MC_BY_TYPE[agreementType];
+  const colCount = ASSET_COL_COUNT_BY_TYPE[agreementType];
+  if(!tableName || !mc){
+    throw new Error('Unknown agreement type "' + agreementType + '" — cannot determine which table to save to.');
+  }
+  const liveColumnCount = await getTableColumnCount(tableName);
+  if(liveColumnCount < colCount){
+    throw new Error('The ' + tableName + ' table in SharePoint hasn\'t been fully set up yet — it needs all ' + colCount + ' columns from the AssetTradeDealLog example. Ask an admin to add the missing columns, then try again.');
   }
   if(!window.assetGenerateOutput) throw new Error('Asset form is not ready — please refresh and try again.');
   window.assetGenerateOutput(); // regenerates lastHtml/lastPlain from the current field values
   const preview = window.assetGetPreview ? window.assetGetPreview() : { html:'' };
-  const state = window.assetGetState ? window.assetGetState() : { agreementType:'Outright Purchase', productCount:1 };
   const productCount = state.productCount || 1;
+  const yearCount = state.yearCount || 1;
   const nowIso = new Date().toISOString();
   currentAssetSubmittedDate = nowIso;
   const v = (id) => { const el = document.getElementById(id); return el ? (el.value||'').trim() : ''; };
-  const feeText = (id) => {
-    const ccy = v(id+'-ccy'), amt = v(id+'-amt');
-    return amt ? (ccy+' '+amt) : '';
+  // Writes a fee's Currency/Amount pair into row[] at the mc keys
+  // "<key>Ccy"/"<key>Amt", reading from the DOM element pair "<domId>-ccy"/
+  // "<domId>-amt". Silently no-ops if the mc doesn't have that key (keeps
+  // this one function reusable across all 3 tables' differing fee sets).
+  const writeFee = (row, mcKeyBase, domId) => {
+    const ccyKey = mcKeyBase+'Ccy', amtKey = mcKeyBase+'Amt';
+    if(!(ccyKey in mc)) return;
+    const ccy = v(domId+'-ccy'), amt = v(domId+'-amt');
+    row[mc[ccyKey]] = amt ? ccy : '';
+    row[mc[amtKey]] = amt ? Number(amt) : '';
   };
   const rowsToWrite = [];
   for(let i = 1; i <= productCount; i++){
-    const row = new Array(ASSET_COL_COUNT).fill('');
-    row[ASSET_MC.bdInCharge] = v('asset-h-bd');
-    row[ASSET_MC.assetId] = assetId;
-    row[ASSET_MC.entity] = v('asset-h-entity');
-    row[ASSET_MC.agreementType] = state.agreementType;
-    row[ASSET_MC.agreementStart] = v('asset-h-agreement-start');
-    row[ASSET_MC.agreementEnd] = v('asset-h-agreement-end');
-    row[ASSET_MC.supplier] = v('asset-h-supplier');
-    row[ASSET_MC.registry] = v('asset-h-registry');
-    row[ASSET_MC.deviceStatus] = v('asset-h-device-status');
-    row[ASSET_MC.paymentTerm] = v('asset-h-payment-term');
-    row[ASSET_MC.broker] = v('asset-h-broker') || 'N/A';
-    row[ASSET_MC.bnmRate] = v('asset-h-bnm-rate');
-    row[ASSET_MC.specialRemarks] = v('asset-h-remarks') || 'N/A';
-    row[ASSET_MC.deviceOwnerName] = v('asset-p'+i+'-owner');
-    row[ASSET_MC.recIssuanceStart] = v('asset-p'+i+'-rec-start');
-    row[ASSET_MC.cod] = v('asset-p'+i+'-cod');
-    row[ASSET_MC.profitRatioSaxon] = (state.agreementType === 'Profit Sharing') ? v('asset-ps-ratio-saxon') : '';
-    row[ASSET_MC.profitRatioOwner] = (state.agreementType === 'Profit Sharing') ? v('asset-ps-ratio-owner') : '';
-    row[ASSET_MC.pricingSummary] = window.assetGetPreview ? window.assetGetPreview().plain : '';
-    row[ASSET_MC.submittedBy] = currentAccount.username;
-    row[ASSET_MC.submittedDate] = nowIso;
-    row[ASSET_MC.generatedHtml] = (i === 1) ? preview.html : '';
-    row[ASSET_MC.status] = STATUS_PENDING_1;
-    row[ASSET_MC.approvedBy1] = ''; row[ASSET_MC.approvedDate1] = '';
-    row[ASSET_MC.approvedBy2] = ''; row[ASSET_MC.approvedDate2] = '';
-    row[ASSET_MC.approvedBy3] = ''; row[ASSET_MC.approvedDate3] = '';
-    row[ASSET_MC.rejectedBy] = ''; row[ASSET_MC.rejectedDate] = ''; row[ASSET_MC.rejectReason] = '';
-    row[ASSET_MC.agreementFileName] = ''; row[ASSET_MC.agreementFileUrl] = '';
-    row[ASSET_MC.description] = '';
-    row[ASSET_MC.rowUid] = generateRowUid();
-    row[ASSET_MC.approvedListItemId] = '';
+    const row = new Array(colCount).fill('');
+    row[mc.bdInCharge] = v('asset-h-bd');
+    row[mc.assetId] = assetId;
+    row[mc.entity] = v('asset-h-entity');
+    row[mc.agreementStart] = v('asset-h-agreement-start');
+    row[mc.agreementEnd] = v('asset-h-agreement-end');
+    row[mc.supplier] = v('asset-h-supplier');
+    row[mc.registry] = v('asset-h-registry');
+    row[mc.deviceStatus] = v('asset-h-device-status');
+    row[mc.paymentTerm] = v('asset-h-payment-term');
+    row[mc.broker] = v('asset-h-broker') || 'N/A';
+    row[mc.bnmRate] = v('asset-h-bnm-rate');
+    row[mc.specialRemarks] = v('asset-h-remarks') || 'N/A';
+    row[mc.deviceOwnerName] = v('asset-p'+i+'-owner');
+    row[mc.recIssuanceStart] = v('asset-p'+i+'-rec-start');
+    row[mc.cod] = v('asset-p'+i+'-cod');
+
+    if(agreementType === 'Outright Purchase'){
+      for(let y = 1; y <= yearCount; y++){
+        const yearVal = v('asset-y'+y+'-year');
+        if(yearVal) writeFee(row, 'price'+yearVal, 'asset-y'+y+'-price');
+      }
+    } else if(agreementType === 'Self Manage'){
+      for(let y = 1; y <= yearCount; y++){
+        const yearVal = v('asset-y'+y+'-year');
+        if(yearVal){
+          writeFee(row, 'price'+yearVal, 'asset-y'+y+'-price');
+          writeFee(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
+        }
+      }
+      writeFee(row, 'deviceRegFee', 'asset-sm-device-reg-fee');
+      writeFee(row, 'recsIssuanceFee', 'asset-sm-recs-issuance-fee');
+      writeFee(row, 'redemptionFee', 'asset-sm-redemption-fee');
+    } else { // Profit Sharing
+      row[mc.profitRatioSaxon] = v('asset-ps-ratio-saxon');
+      row[mc.profitRatioOwner] = v('asset-ps-ratio-owner');
+      writeFee(row, 'deviceRegFee', 'asset-ps-device-reg-fee');
+      writeFee(row, 'recsIssuanceFee', 'asset-ps-recs-issuance-fee');
+      writeFee(row, 'redemptionFee', 'asset-ps-redemption-fee');
+    }
+
+    row[mc.pricingSummary] = window.assetGetPreview ? window.assetGetPreview().plain : '';
+    row[mc.submittedBy] = currentAccount.username;
+    row[mc.submittedDate] = nowIso;
+    row[mc.generatedHtml] = (i === 1) ? preview.html : '';
+    row[mc.status] = STATUS_PENDING_1;
+    row[mc.approvedBy1] = ''; row[mc.approvedDate1] = '';
+    row[mc.approvedBy2] = ''; row[mc.approvedDate2] = '';
+    row[mc.approvedBy3] = ''; row[mc.approvedDate3] = '';
+    row[mc.rejectedBy] = ''; row[mc.rejectedDate] = ''; row[mc.rejectReason] = '';
+    row[mc.agreementFileName] = ''; row[mc.agreementFileUrl] = '';
+    row[mc.description] = '';
+    row[mc.rowUid] = generateRowUid();
+    row[mc.approvedListItemId] = '';
     rowsToWrite.push(row);
   }
-  await addTableRows(ASSET_LOG_TABLE_NAME, rowsToWrite);
-  assetLogRowsCache = await getTableRows(ASSET_LOG_TABLE_NAME);
+  await addTableRows(tableName, rowsToWrite);
+  await loadAllAssetLogTables();
   checkAssetSubmittedLock();
 }
 
@@ -6976,40 +7129,45 @@ async function getAssetApprovalListColumnMap(){
   assetApprovedListColumnMapCache = map;
   return map;
 }
-async function addAssetApprovalToList(values){
+async function addAssetApprovalToList(agreementType, values){
   if(!assetApprovedListId){
     assetApprovedListId = await getSharePointListId(ASSET_APPROVAL_LIST_NAME);
   }
   const columnMap = await getAssetApprovalListColumnMap();
+  const mc = ASSET_MC_BY_TYPE[agreementType];
   // Keyed by the "Asset onboarding approval" list's DISPLAY name — see the
-  // column spec in the AssetTradeDealLog example workbook. Add a line here
-  // any time a new column is added to that list.
+  // column spec in the AssetTradeDealLog example workbook. This list is
+  // shared across all 3 agreement types (it's one flat approval log), so
+  // "Agreement Type" is passed in explicitly rather than read off `values`
+  // (which no longer has that column in the split tables). Profit Ratio is
+  // only meaningful for Profit Sharing rows — left blank otherwise. Add a
+  // line here any time a new column is added to that list.
   const desiredByDisplayName = {
-    'Title': values[ASSET_MC.bdInCharge],
-    'Asset ID (Assigned to BD)': values[ASSET_MC.assetId],
-    'Entity': values[ASSET_MC.entity],
-    'Agreement Type': values[ASSET_MC.agreementType],
-    'Agreement Start Date': values[ASSET_MC.agreementStart],
-    'Agreement End Date': values[ASSET_MC.agreementEnd],
-    'Supplier': values[ASSET_MC.supplier],
-    'Registry': values[ASSET_MC.registry],
-    'Device Status': values[ASSET_MC.deviceStatus],
-    'Payment Term': values[ASSET_MC.paymentTerm],
-    'Broker': values[ASSET_MC.broker],
-    'BNM Rate': values[ASSET_MC.bnmRate],
-    'Special Remarks': values[ASSET_MC.specialRemarks],
-    'Device Owner Name': values[ASSET_MC.deviceOwnerName],
-    'REC Issuance Start Date': values[ASSET_MC.recIssuanceStart],
-    'COD': values[ASSET_MC.cod],
-    'Profit Ratio - Saxon (%)': values[ASSET_MC.profitRatioSaxon],
-    'Profit Ratio - Device Owner (%)': values[ASSET_MC.profitRatioOwner],
-    'Pricing Summary': values[ASSET_MC.pricingSummary],
-    'Status': values[ASSET_MC.status],
-    'Submitted By': values[ASSET_MC.submittedBy],
-    'Submitted Date': values[ASSET_MC.submittedDate],
-    'Approved By': values[ASSET_MC.approvedBy3],
-    'Approved Date': values[ASSET_MC.approvedDate3],
-    'Row Uid': values[ASSET_MC.rowUid]
+    'Title': values[mc.bdInCharge],
+    'Asset ID (Assigned to BD)': values[mc.assetId],
+    'Entity': values[mc.entity],
+    'Agreement Type': agreementType,
+    'Agreement Start Date': values[mc.agreementStart],
+    'Agreement End Date': values[mc.agreementEnd],
+    'Supplier': values[mc.supplier],
+    'Registry': values[mc.registry],
+    'Device Status': values[mc.deviceStatus],
+    'Payment Term': values[mc.paymentTerm],
+    'Broker': values[mc.broker],
+    'BNM Rate': values[mc.bnmRate],
+    'Special Remarks': values[mc.specialRemarks],
+    'Device Owner Name': values[mc.deviceOwnerName],
+    'REC Issuance Start Date': values[mc.recIssuanceStart],
+    'COD': values[mc.cod],
+    'Profit Ratio - Saxon (%)': (agreementType === 'Profit Sharing') ? values[mc.profitRatioSaxon] : '',
+    'Profit Ratio - Device Owner (%)': (agreementType === 'Profit Sharing') ? values[mc.profitRatioOwner] : '',
+    'Pricing Summary': values[mc.pricingSummary],
+    'Status': values[mc.status],
+    'Submitted By': values[mc.submittedBy],
+    'Submitted Date': values[mc.submittedDate],
+    'Approved By': values[mc.approvedBy3],
+    'Approved Date': values[mc.approvedDate3],
+    'Row Uid': values[mc.rowUid]
   };
   const fields = {};
   const skipped = [];
@@ -7036,31 +7194,46 @@ async function addAssetApprovalToList(values){
   }
 }
 
+/* ---- Finds which of the 3 split tables an Asset ID currently lives in,
+   querying LIVE (not the cache) — used by approve/reject, which must act on
+   fresh data and can't assume the caller already knows the agreement type.
+   Returns { type, tableName, mc, rows } sorted by row index, or null. ---- */
+async function findAssetRowGroupLive(assetId){
+  for(const type of ASSET_ALL_TYPES){
+    const tableName = ASSET_TABLE_BY_TYPE[type];
+    const mc = ASSET_MC_BY_TYPE[type];
+    const rows = (await getTableRows(tableName))
+      .filter(r => String(r.values[0][mc.assetId] || '').trim() === assetId)
+      .sort((a,b)=> a.index - b.index);
+    if(rows.length) return { type, tableName, mc, rows };
+  }
+  return null;
+}
+
 /* ---- Approve / reject an Asset agreement ----
    Same 3-level chain, same roles/canActOnStatus as Trade — no BD-matching
    or file-attachment gating (Asset has neither), and no post-approval
    correction workflow, so once a row reaches Approved or Rejected it's
-   final. */
+   final. ---- */
 async function approveAssetDeal(assetId){
   if(!assetId) return;
-  const rows = await getTableRows(ASSET_LOG_TABLE_NAME);
-  const matching = rows.filter(r => String(r.values[0][ASSET_MC.assetId] || '').trim() === assetId).sort((a,b)=> a.index - b.index);
-  if(!matching.length) return;
-  const currentStatus = matching[0].values[0][ASSET_MC.status];
+  const group = await findAssetRowGroupLive(assetId);
+  if(!group) return;
+  const { type, tableName, mc, rows: matching } = group;
+  const currentStatus = matching[0].values[0][mc.status];
   if(!canActOnStatus(currentStatus)) throw new Error('You are not able to approve this asset agreement at its current stage.');
   const nowIso = new Date().toISOString();
   let nextStatus, byCol, dateCol;
-  if(currentStatus === STATUS_PENDING_1){ nextStatus = STATUS_PENDING_2; byCol = ASSET_MC.approvedBy1; dateCol = ASSET_MC.approvedDate1; }
-  else if(currentStatus === STATUS_PENDING_2){ nextStatus = STATUS_PENDING_3; byCol = ASSET_MC.approvedBy2; dateCol = ASSET_MC.approvedDate2; }
-  else if(currentStatus === STATUS_PENDING_3){ nextStatus = STATUS_APPROVED; byCol = ASSET_MC.approvedBy3; dateCol = ASSET_MC.approvedDate3; }
+  if(currentStatus === STATUS_PENDING_1){ nextStatus = STATUS_PENDING_2; byCol = mc.approvedBy1; dateCol = mc.approvedDate1; }
+  else if(currentStatus === STATUS_PENDING_2){ nextStatus = STATUS_PENDING_3; byCol = mc.approvedBy2; dateCol = mc.approvedDate2; }
+  else if(currentStatus === STATUS_PENDING_3){ nextStatus = STATUS_APPROVED; byCol = mc.approvedBy3; dateCol = mc.approvedDate3; }
   else return;
   let assignedAssetId = null;
   if(currentStatus === STATUS_PENDING_1){
     assignedAssetId = await assignFormalAssetId(assetId, matching.length);
   }
-  const recheckRows = await getTableRows(ASSET_LOG_TABLE_NAME);
-  const recheckMatching = recheckRows.filter(r => String(r.values[0][ASSET_MC.assetId] || '').trim() === assetId);
-  const recheckStatus = recheckMatching.length ? recheckMatching[0].values[0][ASSET_MC.status] : undefined;
+  const recheck = await findAssetRowGroupLive(assetId);
+  const recheckStatus = recheck ? recheck.rows[0].values[0][mc.status] : undefined;
   if(recheckStatus !== currentStatus){
     throw new Error('This asset agreement was already actioned by someone else a moment ago (it is now at: ' + (recheckStatus || 'an unknown stage') + '). Your approval was not applied — please refresh and try again.');
   }
@@ -7069,17 +7242,17 @@ async function approveAssetDeal(assetId){
   for(const r of matching){
     productNum++;
     const values = r.values[0].slice();
-    if(assignedAssetId) values[ASSET_MC.assetId] = assignedAssetId;
-    values[ASSET_MC.status] = nextStatus;
+    if(assignedAssetId) values[mc.assetId] = assignedAssetId;
+    values[mc.status] = nextStatus;
     values[byCol] = currentAccount.username;
     values[dateCol] = nowIso;
-    await updateTableRow(ASSET_LOG_TABLE_NAME, r.index, values);
+    await updateTableRow(tableName, r.index, values);
     if(nextStatus === STATUS_APPROVED){
       try{
-        const approvedItemId = await addAssetApprovalToList(values);
+        const approvedItemId = await addAssetApprovalToList(type, values);
         if(approvedItemId){
-          values[ASSET_MC.approvedListItemId] = String(approvedItemId);
-          await updateTableRow(ASSET_LOG_TABLE_NAME, r.index, values);
+          values[mc.approvedListItemId] = String(approvedItemId);
+          await updateTableRow(tableName, r.index, values);
         }
       }catch(err){
         console.error('Could not copy Product ' + productNum + ' into the "Asset onboarding approval" list', err);
@@ -7087,7 +7260,7 @@ async function approveAssetDeal(assetId){
       }
     }
   }
-  assetLogRowsCache = await getTableRows(ASSET_LOG_TABLE_NAME);
+  await loadAllAssetLogTables();
   if(approvedListErrors.length){
     alert('This asset agreement was approved successfully, but copying ' + approvedListErrors.length + ' of ' + matching.length +
       ' product row(s) into the "Asset onboarding approval" list failed:\n\n' + approvedListErrors.join('\n\n') +
@@ -7096,21 +7269,21 @@ async function approveAssetDeal(assetId){
 }
 async function rejectAssetDeal(assetId, reason){
   if(!assetId || !reason) return;
-  const rows = await getTableRows(ASSET_LOG_TABLE_NAME);
-  const matching = rows.filter(r => String(r.values[0][ASSET_MC.assetId] || '').trim() === assetId);
-  if(!matching.length) return;
-  const currentStatus = matching[0].values[0][ASSET_MC.status];
+  const group = await findAssetRowGroupLive(assetId);
+  if(!group) return;
+  const { tableName, mc, rows: matching } = group;
+  const currentStatus = matching[0].values[0][mc.status];
   if(!canActOnStatus(currentStatus)) throw new Error('You are not able to reject this asset agreement at its current stage.');
   const nowIso = new Date().toISOString();
   for(const r of matching){
     const values = r.values[0].slice();
-    values[ASSET_MC.status] = STATUS_REJECTED;
-    values[ASSET_MC.rejectedBy] = currentAccount.username;
-    values[ASSET_MC.rejectedDate] = nowIso;
-    values[ASSET_MC.rejectReason] = reason;
-    await updateTableRow(ASSET_LOG_TABLE_NAME, r.index, values);
+    values[mc.status] = STATUS_REJECTED;
+    values[mc.rejectedBy] = currentAccount.username;
+    values[mc.rejectedDate] = nowIso;
+    values[mc.rejectReason] = reason;
+    await updateTableRow(tableName, r.index, values);
   }
-  assetLogRowsCache = await getTableRows(ASSET_LOG_TABLE_NAME);
+  await loadAllAssetLogTables();
 }
 
 /* ---- Wire the Save agreement button ---- */
