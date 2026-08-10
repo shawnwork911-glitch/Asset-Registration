@@ -404,6 +404,15 @@
   .tab-panel{display:flex;flex-direction:column;gap:24px;}
   #history-list table, #admin-history-list table{width:100%;border-collapse:collapse;}
   #history-list th, #admin-history-list th{font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);}
+  .confirm-type-badge{display:inline-block;font-size:11px;font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--border-strong);white-space:nowrap;}
+  .confirm-type-badge.type-trade{color:var(--accent);border-color:var(--accent);}
+  .confirm-type-badge.type-asset{color:#3f7d4f;border-color:#3f7d4f;}
+  html[data-theme="dark"] .confirm-type-badge.type-asset{color:var(--success);border-color:var(--success);}
+  .confirm-filter-bar{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;margin:0 0 14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);}
+  .confirm-filter-field{display:flex;flex-direction:column;gap:4px;min-width:150px;}
+  .confirm-filter-field label{font-size:11px;color:var(--text-secondary);}
+  .confirm-filter-field select, .confirm-filter-field input{margin:0;padding:6px 8px;font-size:12px;}
+  .confirm-filter-search-field{flex:1 1 200px;}
   tr.confirmation-row-restricted td{color:var(--text-secondary);}
   .row-lock-note{font-size:11px;color:var(--text-secondary);font-style:italic;}
   #draft-status{font-size:12px;color:var(--text-secondary);margin:0;}
@@ -490,7 +499,7 @@
   </div>
 
   <div id="main-tabs">
-    <button type="button" class="active" id="tab-btn-form" data-tab="form">Form</button>
+    <button type="button" class="active" id="tab-btn-form" data-tab="form">Single Trade</button>
     <button type="button" id="tab-btn-asset" data-tab="asset">Asset</button>
     <button type="button" id="tab-btn-confirmations" data-tab="confirmations">Confirmations</button>
   </div>
@@ -605,6 +614,33 @@
 
   <div class="card" id="my-history-card">
     <p class="card-title">My saved confirmations</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every Single Trade confirmation and Asset agreement you've submitted, side by side — see the Type column to tell them apart.</p>
+    <div class="confirm-filter-bar" data-scope="mine">
+      <div class="confirm-filter-field">
+        <label>Type</label>
+        <select class="confirm-filter-type" data-scope="mine">
+          <option value="all">All types</option>
+          <option value="trade">Single Trade</option>
+          <option value="asset">Asset</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field">
+        <label>Status</label>
+        <select class="confirm-filter-status" data-scope="mine">
+          <option value="all">All statuses</option>
+          <option value="Pending Level 1">Pending Level 1</option>
+          <option value="Pending Level 2">Pending Level 2</option>
+          <option value="Pending Level 3">Pending Level 3</option>
+          <option value="Pending Change - Level 3">Pending Change - Level 3</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field confirm-filter-search-field">
+        <label>Search</label>
+        <input type="text" class="confirm-filter-search" data-scope="mine" placeholder="ID, counterparty/entity, name...">
+      </div>
+    </div>
     <div id="history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
@@ -614,27 +650,42 @@
     <div id="approval-queue-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
-  <div class="card" id="admin-history-card">
-    <p class="card-title">All confirmations</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every saved confirmation across every user. You can open full details and edit only for confirmations you created (Admin/Super Admin can open any). Everyone else's confirmations show as a read-only summary row.</p>
-    <div id="admin-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
-  </div>
-
-  <div class="card" id="my-asset-history-card">
-    <p class="card-title">My saved asset agreements</p>
-    <div id="asset-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
-  </div>
-
   <div class="card" id="asset-approval-queue-card" style="display:none;">
     <p class="card-title">Asset approval queue</p>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every asset agreement currently pending at any approval level, across all three agreement types. Approve/Reject only appear on the rows waiting on your own level — the rest are visible for awareness only.</p>
     <div id="asset-approval-queue-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
-  <div class="card" id="admin-asset-history-card">
-    <p class="card-title">All asset agreements</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every saved asset agreement across every user. You can open full details only for agreements you created (Admin/Super Admin can open any). Everyone else's agreements show as a read-only summary row.</p>
-    <div id="admin-asset-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
+  <div class="card" id="admin-history-card">
+    <p class="card-title">All confirmations</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every saved Single Trade confirmation and Asset agreement across every user, with a Type column to tell them apart. You can open full details and edit only for records you created (Admin/Super Admin can open any). Everyone else's records show as a read-only summary row.</p>
+    <div class="confirm-filter-bar" data-scope="all">
+      <div class="confirm-filter-field">
+        <label>Type</label>
+        <select class="confirm-filter-type" data-scope="all">
+          <option value="all">All types</option>
+          <option value="trade">Single Trade</option>
+          <option value="asset">Asset</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field">
+        <label>Status</label>
+        <select class="confirm-filter-status" data-scope="all">
+          <option value="all">All statuses</option>
+          <option value="Pending Level 1">Pending Level 1</option>
+          <option value="Pending Level 2">Pending Level 2</option>
+          <option value="Pending Level 3">Pending Level 3</option>
+          <option value="Pending Change - Level 3">Pending Change - Level 3</option>
+          <option value="Approved">Approved</option>
+          <option value="Rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field confirm-filter-search-field">
+        <label>Search</label>
+        <input type="text" class="confirm-filter-search" data-scope="all" placeholder="ID, counterparty/entity, name...">
+      </div>
+    </div>
+    <div id="admin-history-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
   </div><!-- /tab-panel-confirmations -->
@@ -1110,6 +1161,14 @@ let currentDealDocId = null;
 let currentSubmittedDate = null;
 let draftRowIndex = null;      // this user's row index in the Drafts table, or null if none saved yet
 let logRowsCache = [];         // last-fetched rows from the log table, for the "View" buttons
+// Latest grouped Trade/Asset rows, cached here so the merged "My saved
+// confirmations"/"All confirmations" tables (see refreshCombinedConfirmationTables)
+// can be rebuilt instantly on a filter change without re-fetching, and so
+// whichever side (Trade's loadHistory or Asset's refreshAssetQueueAndHistoryUi)
+// finishes loading last can repaint both merged tables with everything
+// that's currently known.
+let lastTradeAllGroups = [];
+let lastAssetAllGroups = [];
 let userRolesCache = [];       // last-fetched rows from the TradeUserRoles table
 let currentUserRole = 'user';
 let isAdmin = false;           // true for admin1/admin2/admin3/superadmin — any elevated role
@@ -1317,7 +1376,6 @@ function applyRoleUi(){
   // full details. Approval queue stays Admin/Super Admin-only, same as before.
   document.getElementById('admin-history-card').style.display = 'block';
   document.getElementById('approval-queue-card').style.display = isAdmin ? 'block' : 'none';
-  document.getElementById('admin-asset-history-card').style.display = 'block';
   document.getElementById('asset-approval-queue-card').style.display = isAdmin ? 'block' : 'none';
   // The Form tab has nothing to show for review-only roles (Admin1/2/3),
   // since agreement-form-section is hidden for them above — so land those
@@ -3008,23 +3066,19 @@ async function loadHistory(){
   try{
     const rows = await getTableRows(LOG_TABLE_NAME);
     logRowsCache = rows;
-    const myEmail = (currentAccount.username || '').toLowerCase();
-    const mineGroups = groupByDealId(
-      rows.filter(r => (String(r.values[0][MC.submittedBy] || '')).toLowerCase() === myEmail)
-    ).sort((a,b)=> String(b.rows[0].values[0][MC.submittedDate]||'').localeCompare(String(a.rows[0].values[0][MC.submittedDate]||'')));
-    renderHistoryTable(listEl, mineGroups, {showOwner:false, showActions:false, showRequestEdit:true, showFullEdit:true});
 
     const allGroups = groupByDealId(rows)
       .sort((a,b)=> String(b.rows[0].values[0][MC.submittedDate]||'').localeCompare(String(a.rows[0].values[0][MC.submittedDate]||'')));
 
-    // "All confirmations" is now visible to every signed-in user, not just
-    // Admin/Super Admin — but restrictOthers:true means renderHistoryTable
-    // only lets each row's own creator (or an admin) open full details;
-    // anyone else just gets a read-only summary line for that row (see
-    // renderHistoryTable). isAdmin:false readers therefore effectively see
-    // their own rows in full and everyone else's row list is summary-only.
-    const adminListEl = document.getElementById('admin-history-list');
-    renderHistoryTable(adminListEl, allGroups, {showOwner:true, showActions:false, restrictOthers:true});
+    // "My saved confirmations" and "All confirmations" are now rendered
+    // together with their Asset equivalents in one merged table each (see
+    // refreshCombinedConfirmationTables) — row-by-row access is still
+    // enforced the same way (restrictOthers), only the table markup is
+    // shared now. Cache this tab's groups and let the combined refresh
+    // pick them up (it also runs from the Asset side, whichever loads/
+    // changes last wins and repaints both merged tables).
+    lastTradeAllGroups = allGroups;
+    refreshCombinedConfirmationTables();
 
     if(isAdmin){
       const queueEl = document.getElementById('approval-queue-list');
@@ -6352,6 +6406,33 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const wrap = e.target.closest('[id$="-wrap"]');
     if(wrap) wrap.classList.remove('field-missing');
   });
+  // BNM Rate is optional — unlike the other header fields, it's only
+  // filled in when it actually applies to this agreement. The "Applicable"
+  // tick box gates the text input: unticked, the input is disabled and
+  // cleared (so a stale value can't be left behind and accidentally
+  // saved), and validateForm() doesn't require it. Ticked, it behaves like
+  // any other required field.
+  function bnmRateFieldHtml(){
+    return '<div id="asset-h-bnm-rate-wrap">'+
+      '<label for="asset-h-bnm-rate">BNM Rate</label>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<input type="text" id="asset-h-bnm-rate" placeholder="e.g. 4.4700" value="" disabled style="flex:1;min-width:0;"/>'+
+        '<label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:normal;color:var(--text-secondary);white-space:nowrap;">'+
+          '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>Applicable'+
+        '</label>'+
+      '</div>'+
+    '</div>';
+  }
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.id === 'asset-h-bnm-rate-toggle'){
+      const rateInput = document.getElementById('asset-h-bnm-rate');
+      if(!rateInput) return;
+      rateInput.disabled = !e.target.checked;
+      if(!e.target.checked) rateInput.value = '';
+      const wrap = document.getElementById('asset-h-bnm-rate-wrap');
+      if(wrap) wrap.classList.remove('field-missing');
+    }
+  });
   function amountInput(id, def){
     return '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+id+'-amt" placeholder="0.00" value="'+escapeHtml(def&&def.amt||'')+'"/>';
   }
@@ -6373,7 +6454,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       fieldHtml('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
       fieldHtml('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
       fieldHtml('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
-      fieldHtml('BNM Rate', textInput('asset-h-bnm-rate','e.g. 4.4700'), 'asset-h-bnm-rate') +
+      bnmRateFieldHtml() +
       fieldHtml('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, ASSET_CURRENCY_OPTIONS[0]), 'asset-h-currency') +
       '<div style="grid-column:1 / -1;">'+
         fieldHtml('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
@@ -6588,12 +6669,18 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
       ['asset-h-broker','Broker (if any)'],
-      ['asset-h-bnm-rate','BNM Rate'],
       ['asset-h-currency','Currency']
     ];
     detailFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Details', label}); markMissing(id); }
     });
+    // BNM Rate is only required when "Applicable" is ticked — see
+    // bnmRateFieldHtml().
+    const bnmToggle = document.getElementById('asset-h-bnm-rate-toggle');
+    if(bnmToggle && bnmToggle.checked && !val('asset-h-bnm-rate')){
+      missing.push({section:'Details', label:'BNM Rate'});
+      markMissing('asset-h-bnm-rate');
+    }
 
     if(agreementType === 'Outright Purchase' || agreementType === 'Self Manage'){
       const seenYears = {};
@@ -6663,7 +6750,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Payment Term', val('asset-h-payment-term')]);
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     rows.push(['Broker (if any)', val('asset-h-broker') || 'N/A']);
-    rows.push(['BNM Rate', val('asset-h-bnm-rate')]);
+    // BNM Rate is optional — only shown in the generated table when the
+    // "Applicable" tick box was checked, rather than as a blank row.
+    const bnmToggleForRows = document.getElementById('asset-h-bnm-rate-toggle');
+    if(bnmToggleForRows && bnmToggleForRows.checked){
+      rows.push(['BNM Rate', val('asset-h-bnm-rate')]);
+    }
     rows.push(['Currency', val('asset-h-currency')]);
     return rows;
   }
@@ -6953,7 +7045,10 @@ function gatherAssetFormData(){
   const state = window.assetGetState ? window.assetGetState() : { agreementType:'Outright Purchase', yearCount:1, productCount:1 };
   const allValues = {};
   document.querySelectorAll('#tab-panel-asset input[id], #tab-panel-asset select[id], #tab-panel-asset textarea[id]').forEach(el=>{
-    allValues[el.id] = el.value;
+    // Checkboxes (currently just the BNM Rate "Applicable" toggle) need
+    // their checked state, not .value (which is always the fixed string
+    // "on" regardless of whether it's ticked).
+    allValues[el.id] = el.type === 'checkbox' ? el.checked : el.value;
   });
   return { state, allValues, assetId: currentAssetDocId || null, submittedDate: currentAssetSubmittedDate };
 }
@@ -6987,11 +7082,18 @@ function applyAssetDraftData(data){
   if(window.assetSetState) window.assetSetState(state.agreementType, state.yearCount, state.productCount);
   Object.keys(data.allValues || {}).forEach(id=>{
     const el = document.getElementById(id);
-    if(el) el.value = data.allValues[id];
+    if(!el) return;
+    if(el.type === 'checkbox') el.checked = !!data.allValues[id];
+    else el.value = data.allValues[id];
   });
   document.querySelectorAll('#tab-panel-asset input.date-native').forEach(el=>{
     el.dispatchEvent(new Event('change'));
   });
+  // Re-sync the BNM Rate input's disabled/cleared state to match the
+  // restored "Applicable" toggle (see the change listener in
+  // bnmRateFieldHtml()'s setup).
+  const bnmToggleEl = document.getElementById('asset-h-bnm-rate-toggle');
+  if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
   currentAssetDocId = data.assetId || null;
   currentAssetSubmittedDate = data.submittedDate || null;
   suppressAssetAutosave = false;
@@ -7174,13 +7276,13 @@ function renderAssetHistoryTable(el, groups, opts){
 }
 function refreshAssetQueueAndHistoryUi(){
   const allGroups = buildAllAssetGroups();
-  const myEmail = (currentAccount && currentAccount.username || '').toLowerCase();
-  const mineGroups = allGroups.filter(g => (String(g.rows[0].values[0][g.mc.submittedBy] || '')).toLowerCase() === myEmail);
-  const myListEl = document.getElementById('asset-history-list');
-  if(myListEl) renderAssetHistoryTable(myListEl, mineGroups, {showOwner:false, showActions:false});
 
-  const adminListEl = document.getElementById('admin-asset-history-list');
-  if(adminListEl) renderAssetHistoryTable(adminListEl, allGroups, {showOwner:true, showActions:false, restrictOthers:true});
+  // "My saved asset agreements" and "All asset agreements" are now folded
+  // into the merged "My saved confirmations"/"All confirmations" tables
+  // alongside Trade deals (see refreshCombinedConfirmationTables) — cache
+  // these groups and let the combined refresh render both merged tables.
+  lastAssetAllGroups = allGroups;
+  refreshCombinedConfirmationTables();
 
   if(isAdmin){
     const queueEl = document.getElementById('asset-approval-queue-list');
@@ -7190,6 +7292,216 @@ function refreshAssetQueueAndHistoryUi(){
     }
   }
 }
+
+/* ==== Merged "My saved confirmations" / "All confirmations" tables ====
+   Combines Trade deal groups (lastTradeAllGroups) and Asset agreement
+   groups (lastAssetAllGroups) into one row shape (normalizeTradeEntry/
+   normalizeAssetEntry) so both can be listed together in a single table
+   with an extra "Type" column (Single Trade / Asset), and filtered
+   together by type, status, and a free-text search box. The Approval
+   queue / Asset approval queue cards stay separate — their approve/reject
+   logic and column shapes genuinely differ between the two record types,
+   so merging those wasn't part of this — only these two history views. */
+
+// One row per Trade deal group, normalized to the shape renderMergedConfirmationsTable expects.
+function normalizeTradeEntry(g){
+  const v = g.rows[0].values[0];
+  const status = dealGroupStatus(g.rows);
+  const regTechFlags = g.rows.map((r, idx)=>{
+    const rv = r.values[0];
+    if(!needsRegistryTechFix(rv[MC.registry], rv[MC.tech])) return '';
+    const label = g.rows.length > 1 ? 'Product '+(idx+1)+': ' : '';
+    return label + regTechIssueText(rv[MC.registry], rv[MC.tech]);
+  }).filter(Boolean);
+  const idDisplay = isPendingDealId(v[MC.dealId]) ? '-' : friendlyDealId(v[MC.dealId]);
+  return {
+    entryType: 'trade',
+    typeLabel: 'Single Trade',
+    idDisplay: idDisplay,
+    rawId: v[MC.dealId] || '',
+    dateDisplay: formatStoredDate(v[MC.agreementDate]),
+    counterparty: v[MC.company] || '',
+    itemCount: g.rows.length,
+    status: status,
+    ownerEmail: (v[MC.submittedBy] || '').toLowerCase(),
+    ownerDisplay: v[MC.salesPic] || '',
+    trailHtml: approvalTrailText(v),
+    agreementUrl: v[MC.agreementFileUrl] || '',
+    rejectReason: v[MC.rejectReason] || '',
+    rejectedBy: v[MC.rejectedBy] || '',
+    regTechFlags: regTechFlags,
+    submittedDateRaw: v[MC.submittedDate] || '',
+    canRequestEdit: (status === STATUS_APPROVED || status === STATUS_PENDING_3),
+    canFullEdit: canFullyEditAfterLevel1(status),
+    actionsHtml:
+      '<button type="button" class="secondary history-view-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">View</button>',
+    requestEditBtnHtml:
+      '<button type="button" class="secondary history-request-edit-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">Request edit</button>',
+    fullEditBtnHtml:
+      '<button type="button" class="secondary history-full-edit-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;" title="Edit details/products — resends this deal through Level 1 approval again">Edit &amp; resend</button>',
+    searchBlob: [idDisplay, v[MC.company], v[MC.salesPic], v[MC.submittedBy]].map(x=>String(x||'').toLowerCase()).join(' ')
+  };
+}
+// One row per Asset agreement group, normalized to the same shape.
+function normalizeAssetEntry(g){
+  const mc = g.mc;
+  const v = g.rows[0].values[0];
+  const status = v[mc.status] || STATUS_PENDING_1;
+  const idDisplay = isPendingAssetId(g.assetId) ? '-' : friendlyAssetId(g.assetId);
+  return {
+    entryType: 'asset',
+    typeLabel: 'Asset',
+    idDisplay: idDisplay,
+    rawId: g.assetId || '',
+    dateDisplay: formatStoredDate(v[mc.agreementStart]),
+    counterparty: v[mc.entity] || '',
+    itemCount: g.rows.length,
+    status: status,
+    ownerEmail: (v[mc.submittedBy] || '').toLowerCase(),
+    ownerDisplay: v[mc.bdInCharge] || '',
+    trailHtml: assetApprovalTrailText(v, mc),
+    agreementUrl: '',
+    rejectReason: v[mc.rejectReason] || '',
+    rejectedBy: v[mc.rejectedBy] || '',
+    regTechFlags: [],
+    submittedDateRaw: v[mc.submittedDate] || '',
+    canRequestEdit: false,
+    canFullEdit: false,
+    actionsHtml:
+      '<button type="button" class="secondary asset-history-view-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">View</button>',
+    requestEditBtnHtml: '',
+    fullEditBtnHtml: '',
+    searchBlob: [idDisplay, v[mc.entity], v[mc.bdInCharge], v[mc.submittedBy]].map(x=>String(x||'').toLowerCase()).join(' ')
+  };
+}
+// Rebuilds the combined entry lists from whatever's currently cached on
+// the Trade and Asset sides, then re-renders both merged tables. Safe to
+// call before either side has loaded — an empty cache just contributes no
+// rows yet, and the other side's next load calls this again.
+function refreshCombinedConfirmationTables(){
+  const tradeEntries = lastTradeAllGroups.map(normalizeTradeEntry);
+  const assetEntries = lastAssetAllGroups.map(normalizeAssetEntry);
+  const combined = tradeEntries.concat(assetEntries)
+    .sort((a,b)=> String(b.submittedDateRaw).localeCompare(String(a.submittedDateRaw)));
+  const myEmail = (currentAccount && currentAccount.username || '').toLowerCase();
+  window._confirmAllEntries = combined;
+  window._confirmMineEntries = combined.filter(e => e.ownerEmail === myEmail);
+  renderFilteredConfirmationsTable('mine');
+  renderFilteredConfirmationsTable('all');
+}
+// Reads the Type/Status/Search controls for the given scope ('mine' or
+// 'all'), filters that scope's cached entries, and renders into its table.
+function renderFilteredConfirmationsTable(scope){
+  const el = document.getElementById(scope === 'mine' ? 'history-list' : 'admin-history-list');
+  if(!el) return;
+  const entries = (scope === 'mine' ? window._confirmMineEntries : window._confirmAllEntries) || [];
+  const typeSel = document.querySelector('.confirm-filter-type[data-scope="'+scope+'"]');
+  const statusSel = document.querySelector('.confirm-filter-status[data-scope="'+scope+'"]');
+  const searchInput = document.querySelector('.confirm-filter-search[data-scope="'+scope+'"]');
+  const typeVal = typeSel ? typeSel.value : 'all';
+  const statusVal = statusSel ? statusSel.value : 'all';
+  const searchVal = searchInput ? searchInput.value.trim().toLowerCase() : '';
+  const filtered = entries.filter(e=>{
+    if(typeVal !== 'all' && e.entryType !== typeVal) return false;
+    if(statusVal !== 'all' && e.status !== statusVal) return false;
+    if(searchVal && e.searchBlob.indexOf(searchVal) === -1) return false;
+    return true;
+  });
+  const opts = scope === 'mine'
+    ? {showOwner:false, restrictOthers:false, showEditActions:true, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'}
+    : {showOwner:true, restrictOthers:true, showEditActions:false, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'};
+  renderMergedConfirmationsTable(el, filtered, opts);
+}
+document.addEventListener('change', (e)=>{
+  const ctrl = e.target.closest('.confirm-filter-type, .confirm-filter-status');
+  if(ctrl) renderFilteredConfirmationsTable(ctrl.getAttribute('data-scope'));
+});
+document.addEventListener('input', (e)=>{
+  const ctrl = e.target.closest('.confirm-filter-search');
+  if(ctrl) renderFilteredConfirmationsTable(ctrl.getAttribute('data-scope'));
+});
+// Shared renderer for both merged tables — takes already-normalized,
+// already-filtered entries (Trade + Asset mixed together) and draws one
+// table with a Type column. Mirrors renderHistoryTable/renderAssetHistoryTable's
+// markup/behaviour (same row-lock-note restrictOthers pattern, same
+// Rejected-reason and Registry/Tech warning boxes) but never renders
+// Approve/Reject — those only ever appear in the separate approval queues.
+function renderMergedConfirmationsTable(el, entries, opts){
+  opts = opts || {};
+  const showOwner = !!opts.showOwner;
+  const showEditActions = !!opts.showEditActions;
+  const colCount = showOwner ? 7 : 6;
+  if(!entries.length){
+    el.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">'+escapeHtml(opts.emptyText || 'No saved confirmations yet.')+'</p>';
+    return;
+  }
+  let html = '<table><tr>' + (showOwner ? '<th style="text-align:left;padding:6px;">BD in-charge</th>' : '') +
+    '<th style="text-align:left;padding:6px;">ID</th>' +
+    '<th style="text-align:left;padding:6px;">Type</th>' +
+    '<th style="text-align:left;padding:6px;">Date</th>' +
+    '<th style="text-align:left;padding:6px;">Counterparty / Entity</th>' +
+    '<th style="text-align:left;padding:6px;">Products</th>' +
+    '<th style="text-align:left;padding:6px;">Status</th>' +
+    '<th style="padding:6px;"></th></tr>';
+  const restrictOthers = !!opts.restrictOthers;
+  const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
+  entries.forEach(en=>{
+    const typeBadge = '<span class="confirm-type-badge type-'+en.entryType+'">'+escapeHtml(en.typeLabel)+'</span>';
+    const isOwnerOrAdmin = isAdmin || (en.ownerEmail && en.ownerEmail === myEmailLower);
+    if(restrictOthers && !isOwnerOrAdmin){
+      html += '<tr class="confirmation-row-restricted" style="border-top:1px solid var(--border);">' +
+        (showOwner ? '<td style="padding:6px;">'+escapeHtml(en.ownerDisplay)+'</td>' : '') +
+        '<td style="padding:6px;">'+escapeHtml(en.idDisplay)+'</td>' +
+        '<td style="padding:6px;">'+typeBadge+'</td>' +
+        '<td style="padding:6px;">'+escapeHtml(en.dateDisplay)+'</td>' +
+        '<td style="padding:6px;">'+escapeHtml(en.counterparty)+'</td>' +
+        '<td style="padding:6px;">—</td>' +
+        '<td style="padding:6px;">'+statusBadge(en.status)+'</td>' +
+        '<td style="padding:6px;white-space:nowrap;"><span class="row-lock-note">Owner only</span></td>' +
+      '</tr>';
+      return;
+    }
+    const trail = en.trailHtml;
+    const agreementLink = en.agreementUrl
+      ? '<div style="font-size:11px;margin-top:2px;"><a href="'+escapeHtml(en.agreementUrl)+'" target="_blank" rel="noopener">📄 View agreement</a></div>'
+      : '';
+    const canRequestEdit = showEditActions && en.canRequestEdit;
+    const canFullEdit = showEditActions && en.canFullEdit;
+    html += '<tr style="border-top:1px solid var(--border);">' +
+      (showOwner ? '<td style="padding:6px;">'+escapeHtml(en.ownerDisplay)+'</td>' : '') +
+      '<td style="padding:6px;">'+escapeHtml(en.idDisplay)+'</td>' +
+      '<td style="padding:6px;">'+typeBadge+'</td>' +
+      '<td style="padding:6px;">'+escapeHtml(en.dateDisplay)+'</td>' +
+      '<td style="padding:6px;">'+escapeHtml(en.counterparty)+'</td>' +
+      '<td style="padding:6px;">'+en.itemCount+'</td>' +
+      '<td style="padding:6px;">'+statusBadge(en.status)+
+        (trail ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+trail+'</div>' : '')+
+        agreementLink+
+      '</td>' +
+      '<td style="padding:6px;white-space:nowrap;">' +
+        en.actionsHtml +
+        (canRequestEdit ? ' '+en.requestEditBtnHtml : '') +
+        (canFullEdit ? ' '+en.fullEditBtnHtml : '') +
+      '</td>' +
+    '</tr>';
+    if(en.regTechFlags.length){
+      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
+        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+        '<strong>⚠ Registry/Tech needs confirmation:</strong> '+escapeHtml(en.regTechFlags.join(' · '))+
+        '. Please edit to the correct Registry/Tech, deadline given 1 month before the Delivery End Date.' +
+        '</div></td></tr>';
+    }
+    if(en.status === STATUS_REJECTED && en.rejectReason){
+      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
+        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+        '<strong>Rejected'+(en.rejectedBy?(' by '+escapeHtml(en.rejectedBy)):'')+':</strong> '+escapeHtml(en.rejectReason) +
+        '</div></td></tr>';
+    }
+  });
+  html += '</table>';
+  el.innerHTML = html;
+}
+
 // View-only modal for an Asset agreement — reuses the same overlay/table
 // DOM as the Trade "View" modal, but passes no row group (so the
 // superadmin-only "Edit details" button, which is wired to Trade's recap
