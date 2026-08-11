@@ -393,14 +393,15 @@
     color:var(--text-secondary);
   }
   #user-bar .right{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-  #main-tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);}
+  #main-tabs{display:flex;gap:10px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin-bottom:4px;}
   #main-tabs button{
-    background:transparent;border:none;border-bottom:2px solid transparent;
-    padding:10px 4px;margin-bottom:-1px;font-size:14px;font-weight:600;
-    color:var(--text-secondary);cursor:pointer;
+    background:transparent;border:none;border-bottom:3px solid transparent;
+    padding:14px 18px;margin-bottom:-2px;font-size:17px;font-weight:700;
+    border-radius:8px 8px 0 0;
+    color:var(--text-secondary);cursor:pointer;transition:background .15s ease,color .15s ease;
   }
-  #main-tabs button.active{color:var(--text);border-bottom-color:var(--accent);}
-  #main-tabs button:hover{color:var(--text);}
+  #main-tabs button.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface-2);}
+  #main-tabs button:hover{color:var(--text);background:var(--surface-2);}
   .tab-panel{display:flex;flex-direction:column;gap:24px;}
   #history-list table, #admin-history-list table{width:100%;border-collapse:collapse;}
   #history-list th, #admin-history-list th{font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);}
@@ -502,6 +503,8 @@
     <button type="button" class="active" id="tab-btn-form" data-tab="form">Single Trade</button>
     <button type="button" id="tab-btn-asset" data-tab="asset">Asset</button>
     <button type="button" id="tab-btn-confirmations" data-tab="confirmations">Confirmations</button>
+    <button type="button" id="tab-btn-usermgmt" data-tab="usermgmt" style="display:none;">User management</button>
+    <button type="button" id="tab-btn-dealid" data-tab="dealid" style="display:none;">Deal ID numbering</button>
   </div>
 
   <div id="tab-panel-form" class="tab-panel">
@@ -708,7 +711,8 @@
 
   </div><!-- /tab-panel-confirmations -->
 
-  <div class="card" id="user-mgmt-card" style="display:none;">
+  <div id="tab-panel-usermgmt" class="tab-panel" style="display:none;">
+  <div class="card" id="user-mgmt-card">
     <p class="card-title">User management</p>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Superadmin only. Assign each person's approval level — Admin Level 1, 2, 3, or plain User. Levels approve in order (1 → 2 → 3) before a deal counts as fully Approved.</p>
     <div id="user-mgmt-error" style="display:none;font-size:12px;color:#8a2d1f;background:#fdecea;border:1px solid #e2a49a;border-radius:6px;padding:8px 10px;margin-bottom:10px;"></div>
@@ -730,8 +734,10 @@
     </div>
     <div id="user-mgmt-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
+  </div><!-- /tab-panel-usermgmt -->
 
-  <div class="card" id="dealid-settings-card" style="display:none;">
+  <div id="tab-panel-dealid" class="tab-panel" style="display:none;">
+  <div class="card" id="dealid-settings-card">
     <p class="card-title">Deal ID numbering</p>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Superadmin only. Sets the lowest 5-digit number the next new Deal ID can start from — e.g. to line this system up with numbering used elsewhere, or to pick a clean range for testing. It's a floor, not a reset: once any deal has been issued at or above that number, this has no further effect and nothing already issued is renumbered.</p>
     <div id="dealid-settings-error" style="display:none;font-size:12px;color:#8a2d1f;background:#fdecea;border:1px solid #e2a49a;border-radius:6px;padding:8px 10px;margin-bottom:10px;"></div>
@@ -744,6 +750,7 @@
     </div>
     <p id="dealid-start-current" style="font-size:12px;color:var(--text-secondary);margin:10px 0 0;"></p>
   </div>
+  </div><!-- /tab-panel-dealid -->
 
   <footer>Built from the Trade Confirmation email SOP · draft autosaves per account, approval and history saved to the shared SharePoint workbook</footer>
 
@@ -1235,12 +1242,18 @@ document.getElementById('signout-btn').addEventListener('click', ()=>{
   msalInstance.logoutPopup({ account }).finally(()=> location.reload());
 });
 
-/* ---- Main tab switching (Single Trade / Confirmations) ----
+/* ---- Main tab switching (Single Trade / Confirmations / User management /
+   Deal ID numbering) ----
    Purely a UI grouping — doesn't change who can see what inside each tab;
    that's still governed by applyRoleUi()/renderMergedConfirmationsTable()
-   per element and per row. Everyone signed in gets both tabs. */
+   per element and per row. Everyone signed in gets the first three tabs;
+   User management and Deal ID numbering are superadmin-only — their tab
+   buttons are hidden for everyone else (see applyRoleUi), and this guard
+   is a second layer so switching into them isn't possible even via a
+   stray script/console call while signed in as anything else.*/
 function setActiveTab(tab){
-  ['form','asset','confirmations'].forEach(function(t){
+  if((tab === 'usermgmt' || tab === 'dealid') && currentUserRole !== 'superadmin') return;
+  ['form','asset','confirmations','usermgmt','dealid'].forEach(function(t){
     const isActive = t === tab;
     document.getElementById('tab-panel-'+t).style.display = isActive ? 'flex' : 'none';
     document.getElementById('tab-btn-'+t).classList.toggle('active', isActive);
@@ -1249,6 +1262,8 @@ function setActiveTab(tab){
 document.getElementById('tab-btn-form').addEventListener('click', ()=> setActiveTab('form'));
 document.getElementById('tab-btn-asset').addEventListener('click', ()=> setActiveTab('asset'));
 document.getElementById('tab-btn-confirmations').addEventListener('click', ()=> setActiveTab('confirmations'));
+document.getElementById('tab-btn-usermgmt').addEventListener('click', ()=> setActiveTab('usermgmt'));
+document.getElementById('tab-btn-dealid').addEventListener('click', ()=> setActiveTab('dealid'));
 
 window.addEventListener('load', async ()=>{
   await msalInstance.initialize();
@@ -1402,8 +1417,12 @@ function applyRoleUi(){
   document.getElementById('tab-btn-form').style.display = isUserRole ? 'inline-block' : 'none';
   setActiveTab(isUserRole ? 'form' : 'confirmations');
   const isSuperadmin = currentUserRole === 'superadmin';
-  document.getElementById('user-mgmt-card').style.display = isSuperadmin ? 'block' : 'none';
-  document.getElementById('dealid-settings-card').style.display = isSuperadmin ? 'block' : 'none';
+  // User management and Deal ID numbering live in their own tabs now
+  // (beside Confirmations) instead of always-visible cards below it — the
+  // tab buttons are the only visibility gate needed; setActiveTab() adds a
+  // second guard against ever landing on either tab as a non-superadmin.
+  document.getElementById('tab-btn-usermgmt').style.display = isSuperadmin ? 'inline-block' : 'none';
+  document.getElementById('tab-btn-dealid').style.display = isSuperadmin ? 'inline-block' : 'none';
   if(isSuperadmin){
     renderUserMgmtList();
     renderDealIdSettings();
