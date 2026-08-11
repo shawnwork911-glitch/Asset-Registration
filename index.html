@@ -646,14 +646,32 @@
 
   <div class="card" id="approval-queue-card" style="display:none;">
     <p class="card-title">Approval queue</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every confirmation currently pending at any approval level. Approve/Reject only appear on the rows waiting on your own level — the rest are visible for awareness only.</p>
+    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every Single Trade confirmation and Asset agreement currently pending at any approval level, combined here with a Type column. Approve/Reject only appear on the rows waiting on your own level — the rest are visible for awareness only.</p>
+    <div class="confirm-filter-bar" data-scope="queue">
+      <div class="confirm-filter-field">
+        <label>Type</label>
+        <select class="confirm-filter-type" data-scope="queue">
+          <option value="all">All types</option>
+          <option value="trade">Single Trade</option>
+          <option value="asset">Asset</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field">
+        <label>Status</label>
+        <select class="confirm-filter-status" data-scope="queue">
+          <option value="all">All statuses</option>
+          <option value="Pending Level 1">Pending Level 1</option>
+          <option value="Pending Level 2">Pending Level 2</option>
+          <option value="Pending Level 3">Pending Level 3</option>
+          <option value="Pending Change - Level 3">Pending Change - Level 3</option>
+        </select>
+      </div>
+      <div class="confirm-filter-field confirm-filter-search-field">
+        <label>Search</label>
+        <input type="text" class="confirm-filter-search" data-scope="queue" placeholder="ID, counterparty/entity, name...">
+      </div>
+    </div>
     <div id="approval-queue-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
-  </div>
-
-  <div class="card" id="asset-approval-queue-card" style="display:none;">
-    <p class="card-title">Asset approval queue</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Every asset agreement currently pending at any approval level, across all three agreement types. Approve/Reject only appear on the rows waiting on your own level — the rest are visible for awareness only.</p>
-    <div id="asset-approval-queue-list"><p style="font-size:13px;color:var(--text-secondary);">Loading...</p></div>
   </div>
 
   <div class="card" id="admin-history-card">
@@ -1217,10 +1235,10 @@ document.getElementById('signout-btn').addEventListener('click', ()=>{
   msalInstance.logoutPopup({ account }).finally(()=> location.reload());
 });
 
-/* ---- Main tab switching (Form / Confirmations) ----
+/* ---- Main tab switching (Single Trade / Confirmations) ----
    Purely a UI grouping — doesn't change who can see what inside each tab;
-   that's still governed by applyRoleUi()/renderHistoryTable() per element
-   and per row. Everyone signed in gets both tabs. */
+   that's still governed by applyRoleUi()/renderMergedConfirmationsTable()
+   per element and per row. Everyone signed in gets both tabs. */
 function setActiveTab(tab){
   ['form','asset','confirmations'].forEach(function(t){
     const isActive = t === tab;
@@ -1376,7 +1394,6 @@ function applyRoleUi(){
   // full details. Approval queue stays Admin/Super Admin-only, same as before.
   document.getElementById('admin-history-card').style.display = 'block';
   document.getElementById('approval-queue-card').style.display = isAdmin ? 'block' : 'none';
-  document.getElementById('asset-approval-queue-card').style.display = isAdmin ? 'block' : 'none';
   // The Form tab has nothing to show for review-only roles (Admin1/2/3),
   // since agreement-form-section is hidden for them above — so land those
   // roles on the Confirmations tab by default instead. Users/Superadmin
@@ -3070,27 +3087,17 @@ async function loadHistory(){
     const allGroups = groupByDealId(rows)
       .sort((a,b)=> String(b.rows[0].values[0][MC.submittedDate]||'').localeCompare(String(a.rows[0].values[0][MC.submittedDate]||'')));
 
-    // "My saved confirmations" and "All confirmations" are now rendered
-    // together with their Asset equivalents in one merged table each (see
-    // refreshCombinedConfirmationTables) — row-by-row access is still
-    // enforced the same way (restrictOthers), only the table markup is
-    // shared now. Cache this tab's groups and let the combined refresh
-    // pick them up (it also runs from the Asset side, whichever loads/
-    // changes last wins and repaints both merged tables).
+    // "My saved confirmations", "All confirmations", and the Approval
+    // queue are now rendered together with their Asset equivalents in one
+    // merged table each (see refreshCombinedConfirmationTables) — row-by-
+    // row access/actionability is still enforced the same way
+    // (restrictOthers, canActOnStatus), only the table markup is shared
+    // now. Cache this tab's groups and let the combined refresh pick them
+    // up (it also runs from the Asset side, whichever loads/changes last
+    // wins and repaints all three merged tables).
     lastTradeAllGroups = allGroups;
     refreshCombinedConfirmationTables();
 
-    if(isAdmin){
-      const queueEl = document.getElementById('approval-queue-list');
-      // Visibility is intentionally wider than actionability: every admin
-      // level (and superadmin) sees the whole approval queue — every deal
-      // still pending at any level — so people can see what's coming and
-      // where things stand. Whether the Approve/Reject buttons actually
-      // render for a given row is still gated separately by canActOnStatus
-      // inside renderHistoryTable (via its own showActions+canAct check).
-      const queueGroups = allGroups.filter(g => PENDING_STATUSES.includes(dealGroupStatus(g.rows)));
-      renderHistoryTable(queueEl, queueGroups, {showOwner:true, showActions:true, emptyText:'Nothing pending right now.'});
-    }
     tryOpenDealFromUrl();
   }catch(err){
     listEl.innerHTML = '<p style="font-size:13px;color:#8a2d1f;">Could not load: ' + escapeHtml(err.message) + '</p>';
@@ -3121,181 +3128,6 @@ function approvalTrailText(v){
   if(v[MC.approvedBy2]) parts.push('<span title="'+escapeHtml(v[MC.approvedBy2])+'">L2 ✓</span>');
   if(v[MC.approvedBy3]) parts.push('<span title="'+escapeHtml(v[MC.approvedBy3])+'">L3 ✓</span>');
   return parts.join(' · ');
-}
-function renderHistoryTable(el, groups, opts){
-  opts = opts || {};
-  const showOwner = !!opts.showOwner;
-  const showActions = !!opts.showActions;
-  const showRequestEdit = !!opts.showRequestEdit;
-  const showFullEdit = !!opts.showFullEdit;
-  const colCount = showOwner ? 7 : 6;
-  if(!groups.length){
-    el.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">'+escapeHtml(opts.emptyText || 'No saved confirmations yet.')+'</p>';
-    return;
-  }
-  let html = '<table><tr>' + (showOwner ? '<th style="text-align:left;padding:6px;">BD in-charge</th>' : '') +
-    '<th style="text-align:left;padding:6px;">Deal ID</th>' +
-    '<th style="text-align:left;padding:6px;">Agreement Date</th>' +
-    '<th style="text-align:left;padding:6px;">Counterparty</th>' +
-    '<th style="text-align:left;padding:6px;">Products</th>' +
-    '<th style="text-align:left;padding:6px;">Status</th>' +
-    '<th style="padding:6px;"></th></tr>';
-  const restrictOthers = !!opts.restrictOthers;
-  const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
-  groups.forEach(g=>{
-    const v = g.rows[0].values[0];
-    const status = dealGroupStatus(g.rows);
-    // When restrictOthers is set (the shared "All confirmations" list),
-    // anyone who isn't the confirmation's own creator and isn't an
-    // Admin/Super Admin only gets a read-only summary row — no View
-    // button (so full details/generated table stay unopenable), no
-    // action buttons, no approval trail/agreement link/reject reason/etc.
-    // Same underlying data either way; this only changes what's rendered.
-    const ownerEmail = (v[MC.submittedBy] || '').toLowerCase();
-    const isOwnerOrAdmin = isAdmin || (ownerEmail && ownerEmail === myEmailLower);
-    if(restrictOthers && !isOwnerOrAdmin){
-      html += '<tr class="confirmation-row-restricted" style="border-top:1px solid var(--border);">' +
-        (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[MC.salesPic]||'')+'</td>' : '') +
-        '<td style="padding:6px;">'+(isPendingDealId(v[MC.dealId]) ? '-' : escapeHtml(friendlyDealId(v[MC.dealId])))+'</td>' +
-        '<td style="padding:6px;">'+escapeHtml(formatStoredDate(v[MC.agreementDate]))+'</td>' +
-        '<td style="padding:6px;">'+escapeHtml(v[MC.company]||'')+'</td>' +
-        '<td style="padding:6px;">—</td>' +
-        '<td style="padding:6px;">'+statusBadge(status)+'</td>' +
-        '<td style="padding:6px;white-space:nowrap;"><span class="row-lock-note">Owner only</span></td>' +
-      '</tr>';
-      return;
-    }
-    const canAct = showActions && canActOnStatus(status);
-    const trail = approvalTrailText(v);
-    const agreementUrl = v[MC.agreementFileUrl];
-    const agreementLink = agreementUrl
-      ? '<div style="font-size:11px;margin-top:2px;"><a href="'+escapeHtml(agreementUrl)+'" target="_blank" rel="noopener">📄 View agreement</a></div>'
-      : '';
-    const canRequestEdit = showRequestEdit && (status === STATUS_APPROVED || status === STATUS_PENDING_3);
-    // Full details/products edit — only available in the window right
-    // after Admin Level 1 approves, before Level 2 acts (Pending Level 2 —
-    // see canFullyEditAfterLevel1). Deliberately separate from
-    // canRequestEdit above: this covers everything EXCEPT Registry, Tech,
-    // and BD source matching (which stays "Request edit"'s job once Level 2
-    // or Level 3 has approved), and resubmits the whole deal back through
-    // Level 1 rather than just asking Level 3 to sign off on a small
-    // correction.
-    const canFullEdit = showFullEdit && canFullyEditAfterLevel1(status);
-    html += '<tr style="border-top:1px solid var(--border);">' +
-      (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[MC.salesPic]||'')+'</td>' : '') +
-      '<td style="padding:6px;">'+(isPendingDealId(v[MC.dealId]) ? '-' : escapeHtml(friendlyDealId(v[MC.dealId])))+'</td>' +
-      '<td style="padding:6px;">'+escapeHtml(formatStoredDate(v[MC.agreementDate]))+'</td>' +
-      '<td style="padding:6px;">'+escapeHtml(v[MC.company]||'')+'</td>' +
-      '<td style="padding:6px;">'+g.rows.length+'</td>' +
-      '<td style="padding:6px;">'+statusBadge(status)+
-        (trail ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+trail+'</div>' : '')+
-        agreementLink+
-      '</td>' +
-      '<td style="padding:6px;white-space:nowrap;">' +
-        '<button type="button" class="secondary history-view-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">View</button>' +
-        (canAct ? ' <button type="button" class="secondary history-approve-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">Approve</button>' +
-                  ' <button type="button" class="secondary history-reject-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;color:#8a2d1f;border-color:#c1493a;">Reject</button>' : '') +
-        (canRequestEdit ? ' <button type="button" class="secondary history-request-edit-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">Request edit</button>' : '') +
-        (canFullEdit ? ' <button type="button" class="secondary history-full-edit-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;" title="Edit details/products — resends this deal through Level 1 approval again">Edit &amp; resend</button>' : '') +
-      '</td>' +
-    '</tr>';
-    // Shown to whoever's looking at this table — including admin
-    // Level 1/2/3 in the Approval queue, not just after the deal is
-    // already Approved — so an ambiguous Registry/Tech can be caught
-    // (or at least flagged to the submitter) as early as possible, before
-    // it ever needs the heavier post-approval "Request edit" + fresh
-    // Level 3 sign-off round-trip. See needsRegistryTechFix.
-    const regTechFlags = g.rows.map((r, idx)=>{
-      const rv = r.values[0];
-      if(!needsRegistryTechFix(rv[MC.registry], rv[MC.tech])) return '';
-      const label = g.rows.length > 1 ? 'Product '+(idx+1)+': ' : '';
-      return label + regTechIssueText(rv[MC.registry], rv[MC.tech]);
-    }).filter(Boolean);
-    if(regTechFlags.length){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>⚠ Registry/Tech needs confirmation:</strong> '+escapeHtml(regTechFlags.join(' · '))+
-        '. Please edit to the correct Registry/Tech, deadline given 1 month before the Delivery End Date.' +
-        '</div></td></tr>';
-    }
-    if(status === STATUS_REJECTED && v[MC.rejectReason]){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>Rejected'+(v[MC.rejectedBy]?(' by '+escapeHtml(v[MC.rejectedBy])):'')+':</strong> '+escapeHtml(v[MC.rejectReason]) +
-        '</div></td></tr>';
-    }
-    // A resolved change request's rejection note — status is back to
-    // Approved or Pending Level 3 by the time this shows (see
-    // rejectBdMatchChange), so it doesn't collide with the block above
-    // (which only fires for a fully Rejected deal).
-    if((status === STATUS_APPROVED || status === STATUS_PENDING_3) && v[MC.rejectReason]){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>Change request rejected'+(v[MC.rejectedBy]?(' by '+escapeHtml(v[MC.rejectedBy])):'')+':</strong> '+escapeHtml(v[MC.rejectReason]) +
-        '</div></td></tr>';
-    }
-    if(status === STATUS_PENDING_CHANGE_3){
-      const rows = g.rows.map((r, idx)=>{
-        const rv = r.values[0];
-        const lines = [];
-        if((rv[MC.matching]||'') !== (rv[MC.pendingMatching]||'')){
-          lines.push('Matching: <s>'+escapeHtml(matchingDisplayLabel(rv[MC.matching]))+'</s> → <strong>'+escapeHtml(matchingDisplayLabel(rv[MC.pendingMatching]))+'</strong>');
-        }
-        if((rv[MC.buyerSeller]||'') !== (rv[MC.pendingBuyerSeller]||'')){
-          lines.push('Buyer/Seller: <s>'+escapeHtml(rv[MC.buyerSeller]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingBuyerSeller]||'(blank)')+'</strong>');
-        }
-        if((rv[MC.whichDeal]||'') !== (rv[MC.pendingWhichDeal]||'')){
-          lines.push('Which deal: <s>'+escapeHtml(rv[MC.whichDeal]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingWhichDeal]||'(blank)')+'</strong>');
-        }
-        if((rv[MC.noOfRecs]||'') !== (rv[MC.pendingNoOfRecs]||'')){
-          lines.push('No of RECs: <s>'+escapeHtml(rv[MC.noOfRecs]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingNoOfRecs]||'(blank)')+'</strong>');
-        }
-        if((rv[MC.deliveryDateM]||'') !== (rv[MC.pendingDeliveryDateM]||'')){
-          lines.push('Delivery date: <s>'+escapeHtml(rv[MC.deliveryDateM]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingDeliveryDateM]||'(blank)')+'</strong>');
-        }
-        if((rv[MC.registry]||'') !== (rv[MC.pendingRegistry]||'')){
-          lines.push('Registry: <s>'+escapeHtml(registryDisplayName(rv[MC.registry])||'(blank)')+'</s> → <strong>'+escapeHtml(registryDisplayName(rv[MC.pendingRegistry])||'(blank)')+'</strong>');
-        }
-        if((rv[MC.tech]||'') !== (rv[MC.pendingTech]||'')){
-          lines.push('Tech: <s>'+escapeHtml(techFullName(rv[MC.tech])||'(blank)')+'</s> → <strong>'+escapeHtml(techFullName(rv[MC.pendingTech])||'(blank)')+'</strong>');
-        }
-        if(!lines.length) return '';
-        return '<div style="margin-top:'+(idx>0?'6px':'0')+';">'+(g.rows.length>1?'<strong>Product '+(idx+1)+':</strong> ':'')+lines.join(' · ')+'</div>';
-      }).join('');
-      const requestedBy = v[MC.pendingRequestedBy] ? ' by '+escapeHtml(v[MC.pendingRequestedBy]) : '';
-      // The note is written onto every changed row identically (see
-      // requestBdMatchChange), so the first row in the group always has it.
-      const noteHtml = v[MC.pendingMatchNote]
-        ? '<div style="margin-top:6px;"><strong>Note:</strong> '+escapeHtml(v[MC.pendingMatchNote])+'</div>'
-        : '';
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#f2ecf7;border:1px solid #d3bfe6;color:#4a2d63;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>BD source matching change requested'+requestedBy+':</strong>' + rows + noteHtml +
-        '</div></td></tr>';
-    }
-    if(v[MC.description] && status === STATUS_PENDING_1){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;font-weight:bold;color:var(--text);">' +
-        '<strong style="color:var(--text);">Commercial Justification:</strong> '+escapeHtml(v[MC.description]) +
-        '</div></td></tr>';
-    }
-    // What a post-Level-1 "Edit & resend" last changed (see
-    // saveFullEditAndResubmit) — shown to whoever's reviewing the deal at
-    // any of the three approval levels while it's back in the pending
-    // chain; cleared once the deal reaches Approved or Rejected (see
-    // approveDeal/rejectDeal), so it only ever shows for a deal that's
-    // actually still being reviewed against this edit. Optional column —
-    // v[MC.editChangeSummary] is simply undefined on a workbook that hasn't
-    // added it yet, so this block just doesn't render.
-    if(v[MC.editChangeSummary] && [STATUS_PENDING_1, STATUS_PENDING_2, STATUS_PENDING_3].includes(status)){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#eaf1fb;border:1px solid #b8cdec;color:#1f3a63;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>What changed in the latest edit:</strong><br>' + escapeHtml(v[MC.editChangeSummary]).replace(/\n/g,'<br>') +
-        '</div></td></tr>';
-    }
-  });
-  html += '</table>';
-  el.innerHTML = html;
 }
 // Extracted from the copy-btn handler so both the top Preview card and the
 // View modal (opened from history/queue lists) can copy the same way.
@@ -7169,13 +7001,14 @@ async function loadAssetDraftAndHistory(){
   checkAssetSubmittedLock();
 }
 // ---- Asset approval queue / history rendering ----
-// Mirrors loadHistory()/renderHistoryTable() for Trade deals, but reads
-// from the 3-table assetLogRowsCache instead of one LOG_TABLE_NAME, and
-// skips everything Asset doesn't have: BD source matching change requests,
-// Registry/Tech confirmation flags, the post-approval "Request edit"/"Edit &
-// resend" flows, and Level 2's file-attachment requirement (see the comment
-// above approveAssetDeal). Every row group is one Asset ID's product rows
-// within a single split table (Outright Purchase / Self Manage / Profit
+// Feeds normalizeAssetEntry (which mirrors loadHistory()'s normalizeTradeEntry
+// for Trade deals) from the 3-table assetLogRowsCache instead of one
+// LOG_TABLE_NAME, and skips everything Asset doesn't have: BD source
+// matching change requests, Registry/Tech confirmation flags, the
+// post-approval "Request edit"/"Edit & resend" flows, and Level 2's
+// file-attachment requirement (see the comment above approveAssetDeal).
+// Every row group is one Asset ID's product rows within a single split
+// table (Outright Purchase / Self Manage / Profit
 // Sharing) — Asset ID is unique across all three, so a group never spans
 // more than one table.
 function assetApprovalTrailText(v, mc){
@@ -7211,97 +7044,29 @@ function buildAllAssetGroups(){
     return String(bv).localeCompare(String(av));
   });
 }
-function renderAssetHistoryTable(el, groups, opts){
-  opts = opts || {};
-  const showOwner = !!opts.showOwner;
-  const showActions = !!opts.showActions;
-  const colCount = showOwner ? 7 : 6;
-  if(!groups.length){
-    el.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">'+escapeHtml(opts.emptyText || 'No saved asset agreements yet.')+'</p>';
-    return;
-  }
-  let html = '<table><tr>' + (showOwner ? '<th style="text-align:left;padding:6px;">BD in-charge</th>' : '') +
-    '<th style="text-align:left;padding:6px;">Asset ID</th>' +
-    '<th style="text-align:left;padding:6px;">Type</th>' +
-    '<th style="text-align:left;padding:6px;">Entity</th>' +
-    '<th style="text-align:left;padding:6px;">Products</th>' +
-    '<th style="text-align:left;padding:6px;">Status</th>' +
-    '<th style="padding:6px;"></th></tr>';
-  const restrictOthers = !!opts.restrictOthers;
-  const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
-  groups.forEach(g=>{
-    const mc = g.mc;
-    const v = g.rows[0].values[0];
-    const status = v[mc.status] || STATUS_PENDING_1;
-    const ownerEmail = (v[mc.submittedBy] || '').toLowerCase();
-    const isOwnerOrAdmin = isAdmin || (ownerEmail && ownerEmail === myEmailLower);
-    if(restrictOthers && !isOwnerOrAdmin){
-      html += '<tr class="confirmation-row-restricted" style="border-top:1px solid var(--border);">' +
-        (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[mc.bdInCharge]||'')+'</td>' : '') +
-        '<td style="padding:6px;">'+(isPendingAssetId(g.assetId) ? '-' : escapeHtml(friendlyAssetId(g.assetId)))+'</td>' +
-        '<td style="padding:6px;">'+escapeHtml(g.type)+'</td>' +
-        '<td style="padding:6px;">'+escapeHtml(v[mc.entity]||'')+'</td>' +
-        '<td style="padding:6px;">—</td>' +
-        '<td style="padding:6px;">'+statusBadge(status)+'</td>' +
-        '<td style="padding:6px;white-space:nowrap;"><span class="row-lock-note">Owner only</span></td>' +
-      '</tr>';
-      return;
-    }
-    const canAct = showActions && canActOnStatus(status);
-    const trail = assetApprovalTrailText(v, mc);
-    html += '<tr style="border-top:1px solid var(--border);">' +
-      (showOwner ? '<td style="padding:6px;">'+escapeHtml(v[mc.bdInCharge]||'')+'</td>' : '') +
-      '<td style="padding:6px;">'+(isPendingAssetId(g.assetId) ? '-' : escapeHtml(friendlyAssetId(g.assetId)))+'</td>' +
-      '<td style="padding:6px;">'+escapeHtml(g.type)+'</td>' +
-      '<td style="padding:6px;">'+escapeHtml(v[mc.entity]||'')+'</td>' +
-      '<td style="padding:6px;">'+g.rows.length+'</td>' +
-      '<td style="padding:6px;">'+statusBadge(status)+
-        (trail ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+trail+'</div>' : '')+
-      '</td>' +
-      '<td style="padding:6px;white-space:nowrap;">' +
-        '<button type="button" class="secondary asset-history-view-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">View</button>' +
-        (canAct ? ' <button type="button" class="secondary asset-history-approve-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">Approve</button>' +
-                  ' <button type="button" class="secondary asset-history-reject-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;color:#8a2d1f;border-color:#c1493a;">Reject</button>' : '') +
-      '</td>' +
-    '</tr>';
-    if(status === STATUS_REJECTED && v[mc.rejectReason]){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>Rejected'+(v[mc.rejectedBy]?(' by '+escapeHtml(v[mc.rejectedBy])):'')+':</strong> '+escapeHtml(v[mc.rejectReason]) +
-        '</div></td></tr>';
-    }
-  });
-  html += '</table>';
-  el.innerHTML = html;
-}
 function refreshAssetQueueAndHistoryUi(){
   const allGroups = buildAllAssetGroups();
 
-  // "My saved asset agreements" and "All asset agreements" are now folded
-  // into the merged "My saved confirmations"/"All confirmations" tables
-  // alongside Trade deals (see refreshCombinedConfirmationTables) — cache
-  // these groups and let the combined refresh render both merged tables.
+  // "My saved asset agreements", "All asset agreements", and the Asset
+  // approval queue are now folded into the merged "My saved confirmations"/
+  // "All confirmations"/"Approval queue" tables alongside Trade deals (see
+  // refreshCombinedConfirmationTables) — cache these groups and let the
+  // combined refresh render all three merged tables.
   lastAssetAllGroups = allGroups;
   refreshCombinedConfirmationTables();
-
-  if(isAdmin){
-    const queueEl = document.getElementById('asset-approval-queue-list');
-    if(queueEl){
-      const queueGroups = allGroups.filter(g => PENDING_STATUSES.includes(g.rows[0].values[0][g.mc.status] || STATUS_PENDING_1));
-      renderAssetHistoryTable(queueEl, queueGroups, {showOwner:true, showActions:true, emptyText:'Nothing pending right now.'});
-    }
-  }
 }
 
-/* ==== Merged "My saved confirmations" / "All confirmations" tables ====
+/* ==== Merged "My saved confirmations" / "All confirmations" / "Approval
+   queue" tables ====
    Combines Trade deal groups (lastTradeAllGroups) and Asset agreement
    groups (lastAssetAllGroups) into one row shape (normalizeTradeEntry/
    normalizeAssetEntry) so both can be listed together in a single table
    with an extra "Type" column (Single Trade / Asset), and filtered
-   together by type, status, and a free-text search box. The Approval
-   queue / Asset approval queue cards stay separate — their approve/reject
-   logic and column shapes genuinely differ between the two record types,
-   so merging those wasn't part of this — only these two history views. */
+   together by type, status, and a free-text search box. All three cards
+   that used to have a separate Trade table and Asset table now share one
+   table each — Approve/Reject buttons on the queue table are still gated
+   per-row by canActOnStatus exactly as before, just via en.canAct instead
+   of a second copy of the same check. */
 
 // One row per Trade deal group, normalized to the shape renderMergedConfirmationsTable expects.
 function normalizeTradeEntry(g){
@@ -7314,6 +7079,93 @@ function normalizeTradeEntry(g){
     return label + regTechIssueText(rv[MC.registry], rv[MC.tech]);
   }).filter(Boolean);
   const idDisplay = isPendingDealId(v[MC.dealId]) ? '-' : friendlyDealId(v[MC.dealId]);
+  // Every extra info/warning box the old per-type renderHistoryTable used
+  // to show below a Trade row (Registry/Tech flag, Rejected reason, a
+  // resolved change request's rejection note, the BD source matching
+  // change-requested diff, Commercial Justification, and the latest
+  // "Edit & resend" change summary) — carried over as-is so nothing that
+  // used to show in the old separate tables goes missing now that Trade
+  // and Asset rows share one renderer. Each entry here is just the inner
+  // box markup; the shared renderer wraps it in the right <tr><td colspan>.
+  const extraBoxes = [];
+  if(regTechFlags.length){
+    extraBoxes.push(
+      '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>⚠ Registry/Tech needs confirmation:</strong> '+escapeHtml(regTechFlags.join(' · '))+
+      '. Please edit to the correct Registry/Tech, deadline given 1 month before the Delivery End Date.' +
+      '</div>'
+    );
+  }
+  if(status === STATUS_REJECTED && v[MC.rejectReason]){
+    extraBoxes.push(
+      '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>Rejected'+(v[MC.rejectedBy]?(' by '+escapeHtml(v[MC.rejectedBy])):'')+':</strong> '+escapeHtml(v[MC.rejectReason]) +
+      '</div>'
+    );
+  }
+  // A resolved change request's rejection note — status is back to
+  // Approved or Pending Level 3 by the time this shows (see
+  // rejectBdMatchChange), so it doesn't collide with the block above
+  // (which only fires for a fully Rejected deal).
+  if((status === STATUS_APPROVED || status === STATUS_PENDING_3) && v[MC.rejectReason]){
+    extraBoxes.push(
+      '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>Change request rejected'+(v[MC.rejectedBy]?(' by '+escapeHtml(v[MC.rejectedBy])):'')+':</strong> '+escapeHtml(v[MC.rejectReason]) +
+      '</div>'
+    );
+  }
+  if(status === STATUS_PENDING_CHANGE_3){
+    const diffRows = g.rows.map((r, idx)=>{
+      const rv = r.values[0];
+      const lines = [];
+      if((rv[MC.matching]||'') !== (rv[MC.pendingMatching]||'')){
+        lines.push('Matching: <s>'+escapeHtml(matchingDisplayLabel(rv[MC.matching]))+'</s> → <strong>'+escapeHtml(matchingDisplayLabel(rv[MC.pendingMatching]))+'</strong>');
+      }
+      if((rv[MC.buyerSeller]||'') !== (rv[MC.pendingBuyerSeller]||'')){
+        lines.push('Buyer/Seller: <s>'+escapeHtml(rv[MC.buyerSeller]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingBuyerSeller]||'(blank)')+'</strong>');
+      }
+      if((rv[MC.whichDeal]||'') !== (rv[MC.pendingWhichDeal]||'')){
+        lines.push('Which deal: <s>'+escapeHtml(rv[MC.whichDeal]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingWhichDeal]||'(blank)')+'</strong>');
+      }
+      if((rv[MC.noOfRecs]||'') !== (rv[MC.pendingNoOfRecs]||'')){
+        lines.push('No of RECs: <s>'+escapeHtml(rv[MC.noOfRecs]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingNoOfRecs]||'(blank)')+'</strong>');
+      }
+      if((rv[MC.deliveryDateM]||'') !== (rv[MC.pendingDeliveryDateM]||'')){
+        lines.push('Delivery date: <s>'+escapeHtml(rv[MC.deliveryDateM]||'(blank)')+'</s> → <strong>'+escapeHtml(rv[MC.pendingDeliveryDateM]||'(blank)')+'</strong>');
+      }
+      if((rv[MC.registry]||'') !== (rv[MC.pendingRegistry]||'')){
+        lines.push('Registry: <s>'+escapeHtml(registryDisplayName(rv[MC.registry])||'(blank)')+'</s> → <strong>'+escapeHtml(registryDisplayName(rv[MC.pendingRegistry])||'(blank)')+'</strong>');
+      }
+      if((rv[MC.tech]||'') !== (rv[MC.pendingTech]||'')){
+        lines.push('Tech: <s>'+escapeHtml(techFullName(rv[MC.tech])||'(blank)')+'</s> → <strong>'+escapeHtml(techFullName(rv[MC.pendingTech])||'(blank)')+'</strong>');
+      }
+      if(!lines.length) return '';
+      return '<div style="margin-top:'+(idx>0?'6px':'0')+';">'+(g.rows.length>1?'<strong>Product '+(idx+1)+':</strong> ':'')+lines.join(' · ')+'</div>';
+    }).join('');
+    const requestedBy = v[MC.pendingRequestedBy] ? ' by '+escapeHtml(v[MC.pendingRequestedBy]) : '';
+    const noteHtml = v[MC.pendingMatchNote]
+      ? '<div style="margin-top:6px;"><strong>Note:</strong> '+escapeHtml(v[MC.pendingMatchNote])+'</div>'
+      : '';
+    extraBoxes.push(
+      '<div style="background:#f2ecf7;border:1px solid #d3bfe6;color:#4a2d63;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>BD source matching change requested'+requestedBy+':</strong>' + diffRows + noteHtml +
+      '</div>'
+    );
+  }
+  if(v[MC.description] && status === STATUS_PENDING_1){
+    extraBoxes.push(
+      '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:12px;font-weight:bold;color:var(--text);">' +
+      '<strong style="color:var(--text);">Commercial Justification:</strong> '+escapeHtml(v[MC.description]) +
+      '</div>'
+    );
+  }
+  if(v[MC.editChangeSummary] && [STATUS_PENDING_1, STATUS_PENDING_2, STATUS_PENDING_3].includes(status)){
+    extraBoxes.push(
+      '<div style="background:#eaf1fb;border:1px solid #b8cdec;color:#1f3a63;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>What changed in the latest edit:</strong><br>' + escapeHtml(v[MC.editChangeSummary]).replace(/\n/g,'<br>') +
+      '</div>'
+    );
+  }
   return {
     entryType: 'trade',
     typeLabel: 'Single Trade',
@@ -7327,14 +7179,18 @@ function normalizeTradeEntry(g){
     ownerDisplay: v[MC.salesPic] || '',
     trailHtml: approvalTrailText(v),
     agreementUrl: v[MC.agreementFileUrl] || '',
-    rejectReason: v[MC.rejectReason] || '',
-    rejectedBy: v[MC.rejectedBy] || '',
-    regTechFlags: regTechFlags,
+    extraBoxes: extraBoxes,
     submittedDateRaw: v[MC.submittedDate] || '',
+    subtype: '',
     canRequestEdit: (status === STATUS_APPROVED || status === STATUS_PENDING_3),
     canFullEdit: canFullyEditAfterLevel1(status),
+    canAct: canActOnStatus(status),
     actionsHtml:
       '<button type="button" class="secondary history-view-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">View</button>',
+    approveBtnHtml:
+      '<button type="button" class="secondary history-approve-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">Approve</button>',
+    rejectBtnHtml:
+      '<button type="button" class="secondary history-reject-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;color:#8a2d1f;border-color:#c1493a;">Reject</button>',
     requestEditBtnHtml:
       '<button type="button" class="secondary history-request-edit-btn" data-dealid="'+escapeHtml(v[MC.dealId]||'')+'" style="padding:4px 10px;font-size:12px;">Request edit</button>',
     fullEditBtnHtml:
@@ -7348,6 +7204,14 @@ function normalizeAssetEntry(g){
   const v = g.rows[0].values[0];
   const status = v[mc.status] || STATUS_PENDING_1;
   const idDisplay = isPendingAssetId(g.assetId) ? '-' : friendlyAssetId(g.assetId);
+  const extraBoxes = [];
+  if(status === STATUS_REJECTED && v[mc.rejectReason]){
+    extraBoxes.push(
+      '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
+      '<strong>Rejected'+(v[mc.rejectedBy]?(' by '+escapeHtml(v[mc.rejectedBy])):'')+':</strong> '+escapeHtml(v[mc.rejectReason]) +
+      '</div>'
+    );
+  }
   return {
     entryType: 'asset',
     typeLabel: 'Asset',
@@ -7361,21 +7225,31 @@ function normalizeAssetEntry(g){
     ownerDisplay: v[mc.bdInCharge] || '',
     trailHtml: assetApprovalTrailText(v, mc),
     agreementUrl: '',
-    rejectReason: v[mc.rejectReason] || '',
-    rejectedBy: v[mc.rejectedBy] || '',
-    regTechFlags: [],
+    extraBoxes: extraBoxes,
     submittedDateRaw: v[mc.submittedDate] || '',
+    // The old separate Asset table had its own "Type" column here for the
+    // agreement subtype (Outright Purchase / Self Manage / Profit
+    // Sharing). Now that "Type" means Single Trade vs Asset, this is
+    // shown instead as a small caption under Entity — see
+    // renderMergedConfirmationsTable — so it isn't lost.
+    subtype: g.type || '',
     canRequestEdit: false,
     canFullEdit: false,
+    canAct: canActOnStatus(status),
     actionsHtml:
       '<button type="button" class="secondary asset-history-view-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">View</button>',
+    approveBtnHtml:
+      '<button type="button" class="secondary asset-history-approve-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;">Approve</button>',
+    rejectBtnHtml:
+      '<button type="button" class="secondary asset-history-reject-btn" data-assetid="'+escapeHtml(g.assetId||'')+'" style="padding:4px 10px;font-size:12px;color:#8a2d1f;border-color:#c1493a;">Reject</button>',
     requestEditBtnHtml: '',
     fullEditBtnHtml: '',
     searchBlob: [idDisplay, v[mc.entity], v[mc.bdInCharge], v[mc.submittedBy]].map(x=>String(x||'').toLowerCase()).join(' ')
   };
 }
 // Rebuilds the combined entry lists from whatever's currently cached on
-// the Trade and Asset sides, then re-renders both merged tables. Safe to
+// the Trade and Asset sides, then re-renders all three merged tables
+// (My saved confirmations, All confirmations, Approval queue). Safe to
 // call before either side has loaded — an empty cache just contributes no
 // rows yet, and the other side's next load calls this again.
 function refreshCombinedConfirmationTables(){
@@ -7386,15 +7260,25 @@ function refreshCombinedConfirmationTables(){
   const myEmail = (currentAccount && currentAccount.username || '').toLowerCase();
   window._confirmAllEntries = combined;
   window._confirmMineEntries = combined.filter(e => e.ownerEmail === myEmail);
+  // Visibility is intentionally wider than actionability: every admin
+  // level (and superadmin) sees the whole combined queue — every record
+  // still pending at any level, across both Trade and Asset — so people
+  // can see what's coming and where things stand. Whether Approve/Reject
+  // actually render for a given row is still gated separately by
+  // canActOnStatus (see en.canAct / renderMergedConfirmationsTable).
+  window._confirmQueueEntries = combined.filter(e => PENDING_STATUSES.includes(e.status));
   renderFilteredConfirmationsTable('mine');
   renderFilteredConfirmationsTable('all');
+  if(isAdmin) renderFilteredConfirmationsTable('queue');
 }
-// Reads the Type/Status/Search controls for the given scope ('mine' or
-// 'all'), filters that scope's cached entries, and renders into its table.
+// Reads the Type/Status/Search controls for the given scope ('mine',
+// 'all', or 'queue'), filters that scope's cached entries, and renders
+// into its table.
 function renderFilteredConfirmationsTable(scope){
-  const el = document.getElementById(scope === 'mine' ? 'history-list' : 'admin-history-list');
+  const elId = scope === 'mine' ? 'history-list' : scope === 'all' ? 'admin-history-list' : 'approval-queue-list';
+  const el = document.getElementById(elId);
   if(!el) return;
-  const entries = (scope === 'mine' ? window._confirmMineEntries : window._confirmAllEntries) || [];
+  const entries = (scope === 'mine' ? window._confirmMineEntries : scope === 'all' ? window._confirmAllEntries : window._confirmQueueEntries) || [];
   const typeSel = document.querySelector('.confirm-filter-type[data-scope="'+scope+'"]');
   const statusSel = document.querySelector('.confirm-filter-status[data-scope="'+scope+'"]');
   const searchInput = document.querySelector('.confirm-filter-search[data-scope="'+scope+'"]');
@@ -7407,9 +7291,14 @@ function renderFilteredConfirmationsTable(scope){
     if(searchVal && e.searchBlob.indexOf(searchVal) === -1) return false;
     return true;
   });
-  const opts = scope === 'mine'
-    ? {showOwner:false, restrictOthers:false, showEditActions:true, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'}
-    : {showOwner:true, restrictOthers:true, showEditActions:false, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'};
+  let opts;
+  if(scope === 'mine'){
+    opts = {showOwner:false, restrictOthers:false, showEditActions:true, showQueueActions:false, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'};
+  }else if(scope === 'all'){
+    opts = {showOwner:true, restrictOthers:true, showEditActions:false, showQueueActions:false, emptyText: entries.length ? 'No confirmations match these filters.' : 'No saved confirmations yet.'};
+  }else{
+    opts = {showOwner:true, restrictOthers:false, showEditActions:false, showQueueActions:true, emptyText: entries.length ? 'Nothing matches these filters.' : 'Nothing pending right now.'};
+  }
   renderMergedConfirmationsTable(el, filtered, opts);
 }
 document.addEventListener('change', (e)=>{
@@ -7420,17 +7309,20 @@ document.addEventListener('input', (e)=>{
   const ctrl = e.target.closest('.confirm-filter-search');
   if(ctrl) renderFilteredConfirmationsTable(ctrl.getAttribute('data-scope'));
 });
-// Shared renderer for both merged tables — takes already-normalized,
-// already-filtered entries (Trade + Asset mixed together) and draws one
-// table with a Type column. Mirrors renderHistoryTable/renderAssetHistoryTable's
-// markup/behaviour (same row-lock-note restrictOthers pattern, same
-// Rejected-reason and Registry/Tech warning boxes) but never renders
-// Approve/Reject — those only ever appear in the separate approval queues.
+// Shared renderer for all three merged tables (My saved confirmations,
+// All confirmations, Approval queue) — takes already-normalized, already-
+// filtered entries (Trade + Asset mixed together) and draws one table
+// with a Type column. Mirrors the old per-type renderHistoryTable/
+// renderAssetHistoryTable's markup/behaviour (same row-lock-note
+// restrictOthers pattern, same warning/info boxes via en.extraBoxes,
+// same Approve/Reject gating via en.canAct) with everything now living in
+// one table instead of two parallel ones.
 function renderMergedConfirmationsTable(el, entries, opts){
   opts = opts || {};
   const showOwner = !!opts.showOwner;
   const showEditActions = !!opts.showEditActions;
-  const colCount = showOwner ? 7 : 6;
+  const showQueueActions = !!opts.showQueueActions;
+  const colCount = showOwner ? 8 : 7; // ID, Type, Date, Counterparty/Entity, Products, Status, Actions [+ BD in-charge]
   if(!entries.length){
     el.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">'+escapeHtml(opts.emptyText || 'No saved confirmations yet.')+'</p>';
     return;
@@ -7447,6 +7339,7 @@ function renderMergedConfirmationsTable(el, entries, opts){
   const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
   entries.forEach(en=>{
     const typeBadge = '<span class="confirm-type-badge type-'+en.entryType+'">'+escapeHtml(en.typeLabel)+'</span>';
+    const subtypeCaption = en.subtype ? '<div style="font-size:11px;color:var(--text-secondary);">'+escapeHtml(en.subtype)+'</div>' : '';
     const isOwnerOrAdmin = isAdmin || (en.ownerEmail && en.ownerEmail === myEmailLower);
     if(restrictOthers && !isOwnerOrAdmin){
       html += '<tr class="confirmation-row-restricted" style="border-top:1px solid var(--border);">' +
@@ -7454,7 +7347,7 @@ function renderMergedConfirmationsTable(el, entries, opts){
         '<td style="padding:6px;">'+escapeHtml(en.idDisplay)+'</td>' +
         '<td style="padding:6px;">'+typeBadge+'</td>' +
         '<td style="padding:6px;">'+escapeHtml(en.dateDisplay)+'</td>' +
-        '<td style="padding:6px;">'+escapeHtml(en.counterparty)+'</td>' +
+        '<td style="padding:6px;">'+escapeHtml(en.counterparty)+subtypeCaption+'</td>' +
         '<td style="padding:6px;">—</td>' +
         '<td style="padding:6px;">'+statusBadge(en.status)+'</td>' +
         '<td style="padding:6px;white-space:nowrap;"><span class="row-lock-note">Owner only</span></td>' +
@@ -7467,12 +7360,13 @@ function renderMergedConfirmationsTable(el, entries, opts){
       : '';
     const canRequestEdit = showEditActions && en.canRequestEdit;
     const canFullEdit = showEditActions && en.canFullEdit;
+    const canAct = showQueueActions && en.canAct;
     html += '<tr style="border-top:1px solid var(--border);">' +
       (showOwner ? '<td style="padding:6px;">'+escapeHtml(en.ownerDisplay)+'</td>' : '') +
       '<td style="padding:6px;">'+escapeHtml(en.idDisplay)+'</td>' +
       '<td style="padding:6px;">'+typeBadge+'</td>' +
       '<td style="padding:6px;">'+escapeHtml(en.dateDisplay)+'</td>' +
-      '<td style="padding:6px;">'+escapeHtml(en.counterparty)+'</td>' +
+      '<td style="padding:6px;">'+escapeHtml(en.counterparty)+subtypeCaption+'</td>' +
       '<td style="padding:6px;">'+en.itemCount+'</td>' +
       '<td style="padding:6px;">'+statusBadge(en.status)+
         (trail ? '<div style="font-size:11px;color:var(--text-secondary);margin-top:2px;">'+trail+'</div>' : '')+
@@ -7480,23 +7374,14 @@ function renderMergedConfirmationsTable(el, entries, opts){
       '</td>' +
       '<td style="padding:6px;white-space:nowrap;">' +
         en.actionsHtml +
+        (canAct ? ' '+en.approveBtnHtml+' '+en.rejectBtnHtml : '') +
         (canRequestEdit ? ' '+en.requestEditBtnHtml : '') +
         (canFullEdit ? ' '+en.fullEditBtnHtml : '') +
       '</td>' +
     '</tr>';
-    if(en.regTechFlags.length){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>⚠ Registry/Tech needs confirmation:</strong> '+escapeHtml(en.regTechFlags.join(' · '))+
-        '. Please edit to the correct Registry/Tech, deadline given 1 month before the Delivery End Date.' +
-        '</div></td></tr>';
-    }
-    if(en.status === STATUS_REJECTED && en.rejectReason){
-      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' +
-        '<div style="background:#fdecea;border:1px solid #e2a49a;color:#8a2d1f;border-radius:6px;padding:8px 10px;font-size:12px;">' +
-        '<strong>Rejected'+(en.rejectedBy?(' by '+escapeHtml(en.rejectedBy)):'')+':</strong> '+escapeHtml(en.rejectReason) +
-        '</div></td></tr>';
-    }
+    en.extraBoxes.forEach(box=>{
+      html += '<tr><td colspan="'+colCount+'" style="padding:0 6px 10px;">' + box + '</td></tr>';
+    });
   });
   html += '</table>';
   el.innerHTML = html;
