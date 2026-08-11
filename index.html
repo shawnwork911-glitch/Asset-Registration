@@ -6391,25 +6391,24 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(wrap) wrap.classList.remove('field-missing');
   });
   // BNM Rate is optional — unlike the other header fields, it's only
-  // filled in when it actually applies to this agreement. The "Applicable"
-  // tick box (placed next to the field's own title, not the input) gates
-  // the textarea: unticked, it's disabled and cleared (so a stale value
-  // can't be left behind and accidentally saved), and validateForm()
-  // doesn't require it. Ticked, it behaves like any other required field.
+  // filled in when it actually applies to this agreement. The tick box sits
+  // to the left of the "BNM Rate" label itself (rather than a separate
+  // "Applicable" checkbox off to the side) and gates the textarea: unticked,
+  // the textarea is hidden entirely (not just disabled) and cleared (so a
+  // stale value can't be left behind and accidentally saved), and
+  // validateForm() doesn't require it. Ticked, the textarea pops into view
+  // and behaves like any other required field.
   // It's a textarea rather than a single-line input because this can end
   // up being a longer sentence, not just a plain number.
   function bnmRateFieldHtml(){
     return '<div id="asset-h-bnm-rate,asset-h-bnm-rate-toggle-wrap" style="grid-column:1 / -1;">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
-        '<label for="asset-h-bnm-rate" style="margin:0;">BNM Rate</label>'+
-        '<div style="display:flex;align-items:center;gap:10px;">'+
-          '<label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;color:var(--text-secondary);white-space:nowrap;margin:0;">'+
-            '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>Applicable'+
-          '</label>'+
-          '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-rate-toggle" title="Lock this field">🔓</button>'+
-        '</div>'+
+        '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
+          '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>BNM Rate'+
+        '</label>'+
+        '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-rate-toggle" title="Lock this field">🔓</button>'+
       '</div>'+
-      '<textarea id="asset-h-bnm-rate" placeholder="e.g. 4.4700" disabled rows="2" style="width:100%;min-height:56px;resize:vertical;box-sizing:border-box;"></textarea>'+
+      '<textarea id="asset-h-bnm-rate" placeholder="e.g. 4.4700" disabled rows="2" style="width:100%;min-height:56px;resize:vertical;box-sizing:border-box;margin-top:6px;display:none;"></textarea>'+
     '</div>';
   }
   document.addEventListener('change', (e)=>{
@@ -6417,6 +6416,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       const rateInput = document.getElementById('asset-h-bnm-rate');
       if(!rateInput) return;
       rateInput.disabled = !e.target.checked;
+      rateInput.style.display = e.target.checked ? 'block' : 'none';
       if(!e.target.checked) rateInput.value = '';
       const wrap = document.getElementById('asset-h-bnm-rate-wrap');
       if(wrap) wrap.classList.remove('field-missing');
@@ -6444,7 +6444,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
       lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
       bnmRateFieldHtml() +
-      lockableField('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, ASSET_CURRENCY_OPTIONS[0]), 'asset-h-currency') +
       '<div style="grid-column:1 / -1;">'+
         lockableField('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
       '</div>';
@@ -6466,6 +6465,16 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   function renderPricingSection(){
     const titleEl = document.getElementById('asset-pricing-card-title');
     const body = document.getElementById('asset-pricing-body');
+    // Currency is one shared field for the whole deal, not per-year — kept
+    // out of the per-type blocks below and rendered once beneath them so it
+    // reads as its own line, not tied to any single year/fee row. Captured
+    // before the innerHTML rewrite so the user's current pick survives an
+    // agreement-type switch instead of resetting to the first option.
+    const prevCurrency = val('asset-h-currency') || ASSET_CURRENCY_OPTIONS[0];
+    const currencyHtml =
+      '<div class="grid" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">'+
+        lockableField('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, prevCurrency), 'asset-h-currency')+
+      '</div>';
     if(agreementType === 'Outright Purchase'){
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
@@ -6473,7 +6482,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
-        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
+        '<div id="asset-year-rows" style="margin-top:16px;"></div>'+
+        currencyHtml;
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
       renderYearRows();
     } else if(agreementType === 'Self Manage'){
@@ -6492,7 +6502,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
-        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
+        '<div id="asset-year-rows" style="margin-top:16px;"></div>'+
+        currencyHtml;
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
       renderYearRows();
     } else {
@@ -6504,7 +6515,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           lockableField('Device registration fee', amountInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-amt')+
           lockableField('RECs issuance fee', amountInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-amt')+
           lockableField('Redemption fee', amountInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-amt')+
-        '</div>';
+        '</div>'+
+        currencyHtml;
     }
     // Restore any per-field locks saved earlier, then re-apply a locked
     // Pricing & Fees section — same pattern the Details/Products sections
@@ -6679,8 +6691,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-registry','Registry'],
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
-      ['asset-h-broker','Broker (if any)'],
-      ['asset-h-currency','Currency']
+      ['asset-h-broker','Broker (if any)']
     ];
     detailFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Details', label}); markMissing(id); }
@@ -6691,6 +6702,13 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(bnmToggle && bnmToggle.checked && !val('asset-h-bnm-rate')){
       missing.push({section:'Details', label:'BNM Rate'});
       markMissing('asset-h-bnm-rate');
+    }
+    // Currency lives under Pricing & Fees now (shared across the whole
+    // deal, not tied to any one year/fee row), so it's validated and
+    // labelled under that section instead of Details.
+    if(!val('asset-h-currency')){
+      missing.push({section:'Pricing & Fees', label:'Currency'});
+      markMissing('asset-h-currency');
     }
 
     if(agreementType === 'Outright Purchase' || agreementType === 'Self Manage'){
@@ -6767,7 +6785,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(bnmToggleForRows && bnmToggleForRows.checked){
       rows.push(['BNM Rate', val('asset-h-bnm-rate')]);
     }
-    rows.push(['Currency', val('asset-h-currency')]);
     return rows;
   }
   function buildPricingSectionData(){
@@ -6798,6 +6815,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         amountVal('asset-ps-redemption-fee').text
       ]]});
     }
+    // Currency is one shared field for the whole deal, not tied to any
+    // single year/fee row — appended as its own small section here so the
+    // generated table mirrors the live form, where it sits below Pricing &
+    // Fees rather than inside any of the type-specific blocks above.
+    out.push({heading:'Currency', cols:['Currency'], rows:[[val('asset-h-currency')]]});
     return out;
   }
   function buildProductRows(){
@@ -7100,8 +7122,8 @@ function applyAssetDraftData(data){
   document.querySelectorAll('#tab-panel-asset input.date-native').forEach(el=>{
     el.dispatchEvent(new Event('change'));
   });
-  // Re-sync the BNM Rate input's disabled/cleared state to match the
-  // restored "Applicable" toggle (see the change listener in
+  // Re-sync the BNM Rate textarea's shown/disabled/cleared state to match
+  // the restored tick-box state (see the change listener in
   // bnmRateFieldHtml()'s setup).
   const bnmToggleEl = document.getElementById('asset-h-bnm-rate-toggle');
   if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
