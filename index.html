@@ -1047,7 +1047,7 @@ const DEAL_ID_START_KEY = "dealIdStart";
 //   3), Rejected By, Rejected Date, Rejection Comment, Agreement File
 //   Name, Agreement File URL, Description, Row Uid, Approved List Item Id.
 const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
-const ASSET_CURRENCY_OPTIONS = ['USD','SGD','RM'];
+const ASSET_CURRENCY_OPTIONS = ['USD','SGD','MYR','EUR'];
 const ASSET_SHARED_KEYS = [
   'bdInCharge','assetId','entity','agreementStart','agreementEnd','supplier',
   'registry','deviceStatus','paymentTerm','broker','bnmRate','currency',
@@ -1064,15 +1064,40 @@ function assetYearFeeKeys(prefix){
   for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'Amt'); }
   return keys;
 }
+// Half-year variants (1st half / 2nd half) of a per-year fee, e.g.
+// assetHalfYearFeeKeys('price') -> price2020H1Amt, price2020H2Amt,
+// price2021H1Amt, price2021H2Amt, ... These are NEW columns added on top of
+// the original full-year-only ones (assetYearFeeKeys), so — same
+// append-only-at-the-end rule as everywhere else in this file — they must
+// always be passed as `extraKeys` to buildAssetColMap (i.e. placed after
+// ASSET_TAIL_KEYS), never mixed into the original per-year block, or every
+// existing row's column positions shift and old data reads back wrong.
+function assetHalfYearFeeKeys(prefix){
+  const keys = [];
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'H1Amt', prefix+y+'H2Amt'); }
+  return keys;
+}
 const ASSET_ONETIME_FEE_KEYS = ['deviceRegFeeAmt','recsIssuanceFeeAmt','redemptionFeeAmt'];
-function buildAssetColMap(pricingKeys){
+// `extraKeys` are appended strictly AFTER ASSET_TAIL_KEYS (i.e. as the very
+// last, right-most columns of the physical Excel table) so that adding them
+// later never shifts the position of any pre-existing column — same
+// append-only-at-the-end convention as TradeDealLog elsewhere in this file.
+function buildAssetColMap(pricingKeys, extraKeys){
   const map = {};
-  ASSET_SHARED_KEYS.concat(pricingKeys, ASSET_TAIL_KEYS).forEach((k,i)=>{ map[k] = i; });
+  ASSET_SHARED_KEYS.concat(pricingKeys, ASSET_TAIL_KEYS, extraKeys||[]).forEach((k,i)=>{ map[k] = i; });
   return map;
 }
-const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'));
+// Outright Purchase's extra (end-of-table) columns: the Hybrid flag +
+// Profit Sharing terms (only meaningful when Hybrid is ticked — see the
+// Hybrid tick box under Outright Purchase's Pricing & Fees) come first,
+// then the 1H/2H half-year Price/RECs columns.
+const ASSET_OP_EXTRA_KEYS = ['hybrid','profitRatioOwner','profitRatioSaxon']
+  .concat(ASSET_ONETIME_FEE_KEYS)
+  .concat(assetHalfYearFeeKeys('price'));
+const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'), ASSET_OP_EXTRA_KEYS);
 const ASSET_MC_SM = buildAssetColMap(
-  assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS)
+  assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS),
+  assetHalfYearFeeKeys('service')
 );
 const ASSET_MC_PS = buildAssetColMap(
   ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS)
@@ -3975,7 +4000,7 @@ function regTechIssueText(registry, tech){
   return issues.join('; ');
 }
 const ORDER_TYPES = ["Stock-In (T)","Stock-Out (T)","Stock-Out (R)"];
-const CURRENCIES = ["USD","SGD","MYR"];
+const CURRENCIES = ["USD","SGD","MYR","EUR"];
 const MATCHING = ["Partially Matched","Open Position","Matched","V-Matched"];
 // Display-only label overrides for the Matching dropdown — the option's
 // value (what gets saved/written to SharePoint) is unaffected.
@@ -6464,8 +6489,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   // always the remainder, filled in automatically (e.g. entering 70 for
   // Device Owner fills 30 for Saxon) rather than typed separately.
   document.addEventListener('input', (e)=>{
-    if(e.target && e.target.id === 'asset-ps-ratio-owner'){
-      const saxonEl = document.getElementById('asset-ps-ratio-saxon');
+    if(e.target && e.target.matches && e.target.matches('.profit-ratio-owner-input')){
+      const saxonEl = document.getElementById(e.target.getAttribute('data-saxon-id'));
       if(!saxonEl) return;
       const ownerNum = parseFloat(e.target.value);
       saxonEl.value = (!isNaN(ownerNum)) ? String(Math.round((100 - ownerNum) * 100) / 100) : '';
@@ -6521,15 +6546,41 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         lockableField('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, prevCurrency), 'asset-h-currency')+
       '</div>';
     if(agreementType === 'Outright Purchase'){
+      // Hybrid combines Outright Purchase with Profit Sharing on the same
+      // agreement: ticking it reveals the same Profit Sharing terms (Profit
+      // Ratio + the 3 one-time fees) alongside the normal per-year Price/
+      // RECs rows below. Captured before the innerHTML rewrite so the
+      // tick survives an agreement-type switch, same as prevCurrency above.
+      const prevHybrid = !!(document.getElementById('asset-op-hybrid-toggle') && document.getElementById('asset-op-hybrid-toggle').checked);
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
         currencyHtml+
+        '<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">'+
+          '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
+            '<input type="checkbox" id="asset-op-hybrid-toggle" style="width:auto;margin:0;"'+(prevHybrid?' checked':'')+'/> Hybrid (combine with Profit Sharing)'+
+          '</label>'+
+        '</div>'+
+        '<div id="asset-op-hybrid-fields" style="display:'+(prevHybrid?'block':'none')+';margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">'+
+          '<p class="trade-title">Profit Sharing terms</p>'+
+          '<div class="grid">'+
+            lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" class="profit-ratio-owner-input" data-saxon-id="asset-op-hybrid-ratio-saxon" id="asset-op-hybrid-ratio-owner" placeholder="e.g. 70"/>', 'asset-op-hybrid-ratio-owner')+
+            lockableField('Profit Ratio — Saxon (%)', '<input type="text" id="asset-op-hybrid-ratio-saxon" placeholder="Auto-filled" readonly/>', 'asset-op-hybrid-ratio-saxon')+
+            feeFieldHtml('Device registration fee', 'asset-op-hybrid-device-reg-fee')+
+            feeFieldHtml('RECs issuance fee', 'asset-op-hybrid-recs-issuance-fee')+
+            feeFieldHtml('Redemption fee', 'asset-op-hybrid-redemption-fee')+
+          '</div>'+
+        '</div>'+
         '<div class="trade-count-row">'+
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
         '<div id="asset-year-rows" style="margin-top:16px;"></div>';
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
+      const hybridToggleEl = document.getElementById('asset-op-hybrid-toggle');
+      hybridToggleEl.addEventListener('change', (e)=>{
+        const fields = document.getElementById('asset-op-hybrid-fields');
+        if(fields) fields.style.display = e.target.checked ? 'block' : 'none';
+      });
       renderYearRows();
     } else if(agreementType === 'Self Manage'){
       // Device registration fee / RECs issuance fee / Redemption fee are
@@ -6562,7 +6613,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       body.innerHTML =
         currencyHtml+
         '<div class="grid">'+
-          lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 70"/>', 'asset-ps-ratio-owner')+
+          lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" class="profit-ratio-owner-input" data-saxon-id="asset-ps-ratio-saxon" id="asset-ps-ratio-owner" placeholder="e.g. 70"/>', 'asset-ps-ratio-owner')+
           lockableField('Profit Ratio — Saxon (%)', '<input type="text" id="asset-ps-ratio-saxon" placeholder="Auto-filled" readonly/>', 'asset-ps-ratio-saxon')+
           feeFieldHtml('Device registration fee', 'asset-ps-device-reg-fee')+
           feeFieldHtml('RECs issuance fee', 'asset-ps-recs-issuance-fee')+
@@ -6589,21 +6640,57 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   // parsed back into a column to write into. The dropdown still shows the
   // familiar "V25" vintage label; its VALUE is the plain 4-digit year
   // (2025), which is what the save code below actually keys off.
+  //
+  // Each vintage year now has THREE selectable periods — Full Year, 1st
+  // Half, 2nd Half (e.g. "V20", "1HV20", "2HV20" for 2020) — as one extra
+  // row still, not three simultaneous columns: the person adds a separate
+  // "Year N" row per period they need pricing for (e.g. one row for 1HV20,
+  // another for 2HV20). The option's VALUE encodes both the year and the
+  // period ("2025" for full year, "2025H1"/"2025H2" for the halves), and
+  // that value is used verbatim as the fee-column-key suffix by the save
+  // code below (writeAmount(row, 'price'+yearVal, ...)), which is why the
+  // H1/H2 columns in ASSET_OP_EXTRA_KEYS/ASSET_MC_SM above are named
+  // price<year>H1Amt/H2Amt / service<year>H1Amt/H2Amt — matching this value
+  // exactly.
   const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
-  function assetYearOptionsHtml(selectedYear){
+  const ASSET_PERIOD_RE = /^(\d{4})(H[12])?$/;
+  function assetYearOptionsHtml(selectedValue){
     let opts = '<option value="">Select year</option>';
     for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
-      const label = 'V' + String(y).slice(2) + ' — ' + y;
-      opts += '<option value="'+y+'"'+(String(selectedYear) === String(y) ? ' selected' : '')+'>'+label+'</option>';
+      const short = String(y).slice(2);
+      const variants = [
+        {value:String(y), label:'V'+short+' — '+y+' (Full Year)'},
+        {value:y+'H1', label:'1HV'+short+' — '+y+' (1st Half)'},
+        {value:y+'H2', label:'2HV'+short+' — '+y+' (2nd Half)'}
+      ];
+      variants.forEach(opt=>{
+        opts += '<option value="'+opt.value+'"'+(String(selectedValue) === opt.value ? ' selected' : '')+'>'+opt.label+'</option>';
+      });
     }
     return opts;
   }
-  // Reads back the plain numeric year (e.g. 2025) selected for pricing row
-  // i, or null if none is selected yet.
+  // Reads back the selected period value ("2025", "2025H1", "2025H2") for
+  // pricing row i, or null if none is selected/valid yet.
   function assetYearVal(i){
     const el = document.getElementById('asset-y'+i+'-year');
-    const n = el ? parseInt(el.value, 10) : NaN;
-    return (!isNaN(n) && n >= ASSET_YEAR_MIN && n <= ASSET_YEAR_MAX) ? n : null;
+    const raw = el ? el.value : '';
+    if(!raw) return null;
+    const m = ASSET_PERIOD_RE.exec(raw);
+    if(!m) return null;
+    const y = parseInt(m[1], 10);
+    return (y >= ASSET_YEAR_MIN && y <= ASSET_YEAR_MAX) ? raw : null;
+  }
+  // Human-readable label for a period value, used in the generated
+  // Pricing & Fees table (e.g. "1HV20 — 2020 (1st Half)") instead of the
+  // raw "2020H1" stored in the dropdown value.
+  function assetPeriodLabel(value){
+    if(!value) return '';
+    const m = ASSET_PERIOD_RE.exec(String(value));
+    if(!m) return String(value);
+    const y = m[1], half = m[2], short = y.slice(2);
+    if(half === 'H1') return '1HV'+short+' — '+y+' (1st Half)';
+    if(half === 'H2') return '2HV'+short+' — '+y+' (2nd Half)';
+    return 'V'+short+' — '+y+' (Full Year)';
   }
   function renderYearRows(){
     const container = document.getElementById('asset-year-rows');
@@ -6793,6 +6880,21 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           }
         });
       }
+      if(agreementType === 'Outright Purchase'){
+        // Hybrid's Profit Sharing terms only need to be filled in when the
+        // Hybrid tick box is actually checked — same "only ticked ones
+        // count" pattern as Self Manage/Profit Sharing's one-time fees.
+        const hybridToggle = document.getElementById('asset-op-hybrid-toggle');
+        if(hybridToggle && hybridToggle.checked){
+          if(!val('asset-op-hybrid-ratio-owner')){ missing.push({section:'Pricing & Fees', label:'Hybrid — Profit Ratio — Device Owner (%)'}); markMissing('asset-op-hybrid-ratio-owner'); }
+          [['asset-op-hybrid-device-reg-fee','Hybrid — Device registration fee'],['asset-op-hybrid-recs-issuance-fee','Hybrid — RECs issuance fee'],['asset-op-hybrid-redemption-fee','Hybrid — Redemption fee']].forEach(([id,label])=>{
+            const toggle = document.getElementById(id+'-toggle');
+            if(toggle && toggle.checked && !amountVal(id).amt){
+              missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt');
+            }
+          });
+        }
+      }
     } else {
       // Only Device Owner (%) is entered — Saxon's share is auto-filled
       // (see the input listener next to feeFieldHtml), so only Device
@@ -6834,7 +6936,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Device Owner', val('asset-h-supplier')]);
     rows.push(['Registry', registryDisplayName(val('asset-h-registry'))]);
     rows.push(['Device status', val('asset-h-device-status')]);
-    rows.push(['Agreement Type', agreementType]);
+    const hybridToggleForType = document.getElementById('asset-op-hybrid-toggle');
+    const isHybridForType = !!(agreementType === 'Outright Purchase' && hybridToggleForType && hybridToggleForType.checked);
+    rows.push(['Agreement Type', agreementType + (isHybridForType ? ' (Hybrid — Profit Sharing)' : '')]);
     rows.push(['Payment Term', val('asset-h-payment-term')]);
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     rows.push(['Broker (if any)', val('asset-h-broker') || 'N/A']);
@@ -6858,7 +6962,18 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(agreementType === 'Outright Purchase'){
       out.push({heading:'Outright Purchase', cols:['Year','Price / RECs'], rows:[]});
       for(let i=1;i<=yearCount;i++){
-        out[0].rows.push([val('asset-y'+i+'-year'), amountVal('asset-y'+i+'-price').text]);
+        out[out.length-1].rows.push([assetPeriodLabel(val('asset-y'+i+'-year')), amountVal('asset-y'+i+'-price').text]);
+      }
+      // Hybrid adds the same Profit Sharing terms block Profit Sharing
+      // itself uses, only when the Hybrid tick box is checked.
+      const hybridToggle = document.getElementById('asset-op-hybrid-toggle');
+      if(hybridToggle && hybridToggle.checked){
+        out.push({heading:'Hybrid — Profit Sharing terms', cols:['Profit Ratio (Device Owner : Saxon)','Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
+          val('asset-op-hybrid-ratio-owner')+'% : '+val('asset-op-hybrid-ratio-saxon')+'%',
+          feeAmtForRow('asset-op-hybrid-device-reg-fee'),
+          feeAmtForRow('asset-op-hybrid-recs-issuance-fee'),
+          feeAmtForRow('asset-op-hybrid-redemption-fee')
+        ]]});
       }
     } else if(agreementType === 'Self Manage'){
       // Ticked-off fee tick boxes leave their amount blank here too — same
@@ -6870,8 +6985,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ]]});
       out.push({heading:'Self Manage — yearly', cols:['Year','Service fee'], rows:[]});
       for(let i=1;i<=yearCount;i++){
-        out[1].rows.push([
-          val('asset-y'+i+'-year'),
+        out[out.length-1].rows.push([
+          assetPeriodLabel(val('asset-y'+i+'-year')),
           amountVal('asset-y'+i+'-service-fee').text
         ]);
       }
@@ -7195,6 +7310,9 @@ function applyAssetDraftData(data){
   // bnmRateFieldHtml()'s setup).
   const bnmToggleEl = document.getElementById('asset-h-bnm-rate-toggle');
   if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
+  // Re-sync Hybrid's shown/hidden Profit Sharing terms block, same reason.
+  const hybridToggleEl = document.getElementById('asset-op-hybrid-toggle');
+  if(hybridToggleEl) hybridToggleEl.dispatchEvent(new Event('change'));
   // Same re-sync, for the Self Manage / Profit Sharing one-time fee tick
   // boxes (see feeFieldHtml()'s change listener).
   document.querySelectorAll('#tab-panel-asset .asset-fee-toggle').forEach(el=>{
@@ -7755,6 +7873,16 @@ async function saveAssetToLog(){
         const yearVal = v('asset-y'+y+'-year');
         if(yearVal) writeAmount(row, 'price'+yearVal, 'asset-y'+y+'-price');
       }
+      const hybridToggleForSave = document.getElementById('asset-op-hybrid-toggle');
+      const hybridOn = !!(hybridToggleForSave && hybridToggleForSave.checked);
+      row[mc.hybrid] = hybridOn ? 'Yes' : '';
+      if(hybridOn){
+        row[mc.profitRatioOwner] = v('asset-op-hybrid-ratio-owner');
+        row[mc.profitRatioSaxon] = v('asset-op-hybrid-ratio-saxon');
+        writeAmount(row, 'deviceRegFee', 'asset-op-hybrid-device-reg-fee');
+        writeAmount(row, 'recsIssuanceFee', 'asset-op-hybrid-recs-issuance-fee');
+        writeAmount(row, 'redemptionFee', 'asset-op-hybrid-redemption-fee');
+      }
     } else if(agreementType === 'Self Manage'){
       for(let y = 1; y <= yearCount; y++){
         const yearVal = v('asset-y'+y+'-year');
@@ -7834,6 +7962,11 @@ async function addAssetApprovalToList(agreementType, values){
   // per-year Service Fee/RECs, and the 3 one-time fees are each only
   // meaningful for their own type(s) — left blank on rows from the other
   // type(s). Add a line here any time a new column is added to that list.
+  // True for plain Profit Sharing rows and for Outright Purchase rows where
+  // the Hybrid tick box was checked — both carry Profit Ratio + one-time
+  // fee data; every other row leaves those columns blank.
+  const isHybridOP = (agreementType === 'Outright Purchase' && values[mc.hybrid] === 'Yes');
+  const isProfitRatioRow = (agreementType === 'Profit Sharing' || isHybridOP);
   const desiredByDisplayName = {
     'Title': values[mc.bdInCharge],
     'Asset ID (Assigned to BD)': values[mc.assetId],
@@ -7852,8 +7985,13 @@ async function addAssetApprovalToList(agreementType, values){
     'Device Owner Name': values[mc.deviceOwnerName],
     'REC Issuance Start Date': values[mc.recIssuanceStart],
     'COD': values[mc.cod],
-    'Profit Ratio - Saxon (%)': (agreementType === 'Profit Sharing') ? values[mc.profitRatioSaxon] : '',
-    'Profit Ratio - Device Owner (%)': (agreementType === 'Profit Sharing') ? values[mc.profitRatioOwner] : '',
+    // Hybrid (Outright Purchase only) — 'Yes' when the Hybrid tick box was
+    // checked, blank for every other row.
+    'Hybrid': (agreementType === 'Outright Purchase') ? (values[mc.hybrid] || '') : '',
+    // Profit Ratio is meaningful for plain Profit Sharing rows AND for
+    // Outright Purchase rows where Hybrid was ticked.
+    'Profit Ratio - Saxon (%)': isProfitRatioRow ? values[mc.profitRatioSaxon] : '',
+    'Profit Ratio - Device Owner (%)': isProfitRatioRow ? values[mc.profitRatioOwner] : '',
     'Pricing Summary': values[mc.pricingSummary],
     'Status': values[mc.status],
     'Submitted By': values[mc.submittedBy],
@@ -7870,16 +8008,25 @@ async function addAssetApprovalToList(agreementType, values){
   // fixed-year columns. Amount only — currency is the single shared
   // "Currency" field above.
   for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
-    let amt = '';
-    if(agreementType === 'Outright Purchase') amt = values[mc['price'+y+'Amt']];
-    else if(agreementType === 'Self Manage') amt = values[mc['service'+y+'Amt']];
+    let amt = '', amtH1 = '', amtH2 = '';
+    if(agreementType === 'Outright Purchase'){
+      amt = values[mc['price'+y+'Amt']];
+      amtH1 = values[mc['price'+y+'H1Amt']];
+      amtH2 = values[mc['price'+y+'H2Amt']];
+    } else if(agreementType === 'Self Manage'){
+      amt = values[mc['service'+y+'Amt']];
+      amtH1 = values[mc['service'+y+'H1Amt']];
+      amtH2 = values[mc['service'+y+'H2Amt']];
+    }
     desiredByDisplayName['RECs ' + y + ' Amount'] = amt;
+    desiredByDisplayName['RECs ' + y + ' 1H Amount'] = amtH1;
+    desiredByDisplayName['RECs ' + y + ' 2H Amount'] = amtH2;
   }
-  // One-time fees — shared design between Self Manage and Profit Sharing
-  // (both have these 3 fees as a single whole-deal amount, not per-year);
-  // left blank for Outright Purchase, which has neither. Amount only, same
-  // reason as above.
-  const hasOneTimeFees = (agreementType === 'Self Manage' || agreementType === 'Profit Sharing');
+  // One-time fees — shared design between Self Manage, Profit Sharing, and
+  // hybrid Outright Purchase (all three have these 3 fees as a single
+  // whole-deal amount, not per-year); left blank for plain Outright
+  // Purchase, which has neither. Amount only, same reason as above.
+  const hasOneTimeFees = (agreementType === 'Self Manage' || isProfitRatioRow);
   desiredByDisplayName['Device Registration Fee Amount'] = hasOneTimeFees ? values[mc.deviceRegFeeAmt] : '';
   desiredByDisplayName['RECs Issuance Fee Amount'] = hasOneTimeFees ? values[mc.recsIssuanceFeeAmt] : '';
   desiredByDisplayName['Redemption Fee Amount'] = hasOneTimeFees ? values[mc.redemptionFeeAmt] : '';
