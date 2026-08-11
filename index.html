@@ -559,11 +559,6 @@
   <div id="tab-panel-asset" class="tab-panel" style="display:none;">
 
   <div class="card">
-    <p class="card-title">Details</p>
-    <div id="asset-header-fields" class="grid"></div>
-  </div>
-
-  <div class="card">
     <p class="card-title">Agreement Type</p>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Choose the agreement type — this changes what the Pricing &amp; Fees section below asks for.</p>
     <div class="segmented" id="asset-agreement-type-segmented">
@@ -573,13 +568,28 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title-row">
+      <p class="card-title">Details</p>
+      <button type="button" class="section-lock" data-section="asset-header" title="Lock this whole section">🔓 Lock section</button>
+    </div>
+    <p id="asset-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Details at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <div id="asset-header-fields" class="grid"></div>
+  </div>
+
   <div class="card" id="asset-pricing-card">
-    <p class="card-title" id="asset-pricing-card-title">Pricing &amp; Fees</p>
+    <div class="card-title-row">
+      <p class="card-title" id="asset-pricing-card-title">Pricing &amp; Fees</p>
+      <button type="button" class="section-lock" data-section="asset-pricing" title="Lock this whole section">🔓 Lock section</button>
+    </div>
     <div id="asset-pricing-body"></div>
   </div>
 
   <div class="card">
-    <p class="card-title">Products</p>
+    <div class="card-title-row">
+      <p class="card-title">Products</p>
+      <button type="button" class="section-lock" data-section="asset-products" title="Lock this whole section">🔓 Lock section</button>
+    </div>
     <div class="trade-count-row">
       <label style="margin:0;">Number of products</label>
       <input type="number" id="asset-product-count" min="1" max="50" step="1" value="1" inputmode="numeric"/>
@@ -1657,6 +1667,106 @@ async function notifyDealIdAssigned(dealId, submitterEmail){
   }
 }
 
+/* ---- Same email notifications for Asset agreements ----
+   Asset agreements go through the exact same 3-level approval chain and
+   role table (APPROVER_ROLE_FOR_STATUS/emailsForRole/sendMailGraph are all
+   shared as-is — they're keyed by role/status, not by record type), but
+   the ID formatting and deep-link query param are Asset's own
+   (friendlyAssetId/isPendingAssetId, "?asset=" instead of "?deal="), so
+   these are separate functions mirroring the four above one-for-one
+   rather than overloading them with a type flag. */
+function assetDeepLink(assetId){
+  return location.origin + location.pathname + '?asset=' + encodeURIComponent(assetId);
+}
+async function notifyNextApproverAsset(status, assetId, description, changeSummary){
+  const role = APPROVER_ROLE_FOR_STATUS[status];
+  if(!role) return; // e.g. Approved — no next approver to notify
+  const toEmails = emailsForRole(role);
+  if(!toEmails.length){
+    console.warn('No ' + role + ' assigned — skipping approval notification for Asset ID ' + assetId);
+    return;
+  }
+  const levelLabel = ROLE_LABELS[role] || role;
+  const link = assetDeepLink(assetId);
+  const displayId = friendlyAssetId(assetId);
+  const label = isPendingAssetId(assetId) ? 'An asset agreement' : 'Asset ID <strong>' + escapeHtml(displayId) + '</strong>';
+  const descBlock = (description && description.trim()) ? '<p><strong>Remarks:</strong> ' + escapeHtml(description) + '</p>' : '';
+  const changeBlock = (changeSummary && changeSummary.trim())
+    ? '<p><strong>What changed since this was last reviewed:</strong><br>' + escapeHtml(changeSummary).replace(/\n/g,'<br>') + '</p>'
+    : '';
+  const html = '<p>' + label + ' is waiting on your ' + escapeHtml(levelLabel) + ' approval.</p>' +
+    descBlock +
+    changeBlock +
+    '<p><a href="' + link + '">Open it in the Trade Confirmation app</a></p>';
+  try{
+    await sendMailGraph(toEmails, 'Approval needed — ' + (isPendingAssetId(assetId) ? levelLabel : displayId + ' (' + levelLabel + ')'), html);
+  }catch(err){
+    console.error('Asset approval notification email failed', err);
+  }
+}
+// Same courtesy heads-up as notifyOtherApproversAtLevel, for the other
+// admins holding the level that was just used on an Asset agreement.
+async function notifyOtherApproversAtLevelAsset(levelRole, assetId, description, approverEmail){
+  const approverKey = (approverEmail || '').trim().toLowerCase();
+  const toEmails = emailsForRole(levelRole).filter(e => e.toLowerCase() !== approverKey);
+  if(!toEmails.length) return;
+  const levelLabel = ROLE_LABELS[levelRole] || levelRole;
+  const link = assetDeepLink(assetId);
+  const displayId = friendlyAssetId(assetId);
+  const label = isPendingAssetId(assetId) ? 'An asset agreement' : 'Asset ID <strong>' + escapeHtml(displayId) + '</strong>';
+  const descBlock = (description && description.trim()) ? '<p><strong>Remarks:</strong> ' + escapeHtml(description) + '</p>' : '';
+  const html = '<p>' + label + ' has already been approved at ' + escapeHtml(levelLabel) + ' by ' + escapeHtml(approverEmail || 'another approver') + '.</p>' +
+    '<p>No action is needed from you at this level — it has already moved on.</p>' +
+    descBlock +
+    '<p><a href="' + link + '">Open it in the Trade Confirmation app</a></p>';
+  try{
+    await sendMailGraph(toEmails, 'Already actioned — ' + (isPendingAssetId(assetId) ? levelLabel : displayId + ' (' + levelLabel + ')'), html);
+  }catch(err){
+    console.error('Notify-other-asset-approvers email failed', err);
+  }
+}
+// Same Rejected-only outcome email as notifySubmitter, for Asset — per the
+// same policy, there's no "fully Approved" email here either; the
+// submitter is already notified once, when their Asset ID is first
+// created (see notifyAssetIdAssigned below).
+async function notifySubmitterAsset(status, assetId, submitterEmail, reason){
+  const email = (submitterEmail || '').trim();
+  if(!email){
+    console.warn('No submitter email on file — skipping outcome notification for Asset ID ' + assetId);
+    return;
+  }
+  if(status !== STATUS_REJECTED) return;
+  const link = assetDeepLink(assetId);
+  const displayId = friendlyAssetId(assetId);
+  const label = isPendingAssetId(assetId) ? 'Your asset agreement (' + escapeHtml(displayId) + ')' : 'Asset ID <strong>' + escapeHtml(displayId) + '</strong>';
+  const subject = 'Rejected — ' + (isPendingAssetId(assetId) ? 'asset agreement' : 'Asset ID ' + displayId);
+  const html = '<p>' + label + ' has been rejected.</p>' +
+    (reason ? '<p><strong>Reason:</strong> ' + escapeHtml(reason) + '</p>' : '') +
+    '<p><a href="' + link + '">View it in the Trade Confirmation app</a></p>';
+  try{
+    await sendMailGraph([email], subject, html);
+  }catch(err){
+    console.error('Asset outcome notification email failed', err);
+  }
+}
+// Same "your ID is ready" email as notifyDealIdAssigned, sent the moment
+// Level 1 approval assigns the real 5-digit Asset ID.
+async function notifyAssetIdAssigned(assetId, submitterEmail){
+  const email = (submitterEmail || '').trim();
+  if(!email){
+    console.warn('No submitter email on file — skipping Asset ID notification for Asset ID ' + assetId);
+    return;
+  }
+  const link = assetDeepLink(assetId);
+  const html = '<p>Your asset agreement has been approved at Level 1 and its Asset ID is now <strong>' + escapeHtml(assetId) + '</strong>.</p>' +
+    '<p><a href="' + link + '">View it in the Trade Confirmation app</a></p>';
+  try{
+    await sendMailGraph([email], 'Asset ID created — ' + assetId, html);
+  }catch(err){
+    console.error('Asset ID notification email failed', err);
+  }
+}
+
 // a notification email's "?deal=XXXXX" link, once logRowsCache has data.
 let urlDealOpened = false;
 function tryOpenDealFromUrl(){
@@ -1676,6 +1786,24 @@ function tryOpenDealFromUrl(){
   const freshHtml = refreshBdMatchingInHtml(withHtml.values[0][MC.generatedHtml], group);
   openViewModal(dealId, freshHtml, withHtml.values[0][MC.agreementFileUrl], group);
   urlDealOpened = true;
+}
+// Same thing as tryOpenDealFromUrl above, but for an approval-notification
+// email's "?asset=XXXXX" link, once assetLogRowsCache has data.
+let urlAssetOpened = false;
+function tryOpenAssetFromUrl(){
+  if(urlAssetOpened) return;
+  const assetId = new URLSearchParams(location.search).get('asset');
+  if(!assetId) { urlAssetOpened = true; return; }
+  const group = findAssetRowGroupInCache(assetId);
+  if(!group) return; // history may not have loaded this asset yet — try again next refresh
+  const withHtml = group.rows.find(r => r.values[0][group.mc.generatedHtml]);
+  if(!withHtml) return;
+  // Same "creator or admin only" rule as tryOpenDealFromUrl.
+  const ownerEmail = (withHtml.values[0][group.mc.submittedBy] || '').toLowerCase();
+  const myEmailLower = (currentAccount && currentAccount.username || '').toLowerCase();
+  if(!isAdmin && ownerEmail !== myEmailLower){ urlAssetOpened = true; return; }
+  openAssetViewModal(assetId, withHtml.values[0][group.mc.generatedHtml], withHtml.values[0][group.mc.agreementFileUrl]);
+  urlAssetOpened = true;
 }
 function renderUserMgmtList(){
   const el = document.getElementById('user-mgmt-list');
@@ -4370,7 +4498,12 @@ function writeSectionLockState(state){
   try{ localStorage.setItem(SECTION_LOCK_KEY, JSON.stringify(state)); }catch(e){}
 }
 function getSectionContainer(section){
-  return section === 'header' ? document.getElementById('header-fields') : document.getElementById('trades-container');
+  if(section === 'header') return document.getElementById('header-fields');
+  if(section === 'trades') return document.getElementById('trades-container');
+  if(section === 'asset-header') return document.getElementById('asset-header-fields');
+  if(section === 'asset-pricing') return document.getElementById('asset-pricing-body');
+  if(section === 'asset-products') return document.getElementById('asset-products-container');
+  return null;
 }
 // Locks or unlocks every field found inside a section container, reusing the
 // same lock-state storage the individual field locks use.
@@ -6259,19 +6392,24 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   });
   // BNM Rate is optional — unlike the other header fields, it's only
   // filled in when it actually applies to this agreement. The "Applicable"
-  // tick box gates the text input: unticked, the input is disabled and
-  // cleared (so a stale value can't be left behind and accidentally
-  // saved), and validateForm() doesn't require it. Ticked, it behaves like
-  // any other required field.
+  // tick box (placed next to the field's own title, not the input) gates
+  // the textarea: unticked, it's disabled and cleared (so a stale value
+  // can't be left behind and accidentally saved), and validateForm()
+  // doesn't require it. Ticked, it behaves like any other required field.
+  // It's a textarea rather than a single-line input because this can end
+  // up being a longer sentence, not just a plain number.
   function bnmRateFieldHtml(){
-    return '<div id="asset-h-bnm-rate-wrap">'+
-      '<label for="asset-h-bnm-rate">BNM Rate</label>'+
-      '<div style="display:flex;align-items:center;gap:8px;">'+
-        '<input type="text" id="asset-h-bnm-rate" placeholder="e.g. 4.4700" value="" disabled style="flex:1;min-width:0;"/>'+
-        '<label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:normal;color:var(--text-secondary);white-space:nowrap;">'+
-          '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>Applicable'+
-        '</label>'+
+    return '<div id="asset-h-bnm-rate,asset-h-bnm-rate-toggle-wrap" style="grid-column:1 / -1;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+        '<label for="asset-h-bnm-rate" style="margin:0;">BNM Rate</label>'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;color:var(--text-secondary);white-space:nowrap;margin:0;">'+
+            '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>Applicable'+
+          '</label>'+
+          '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-rate-toggle" title="Lock this field">🔓</button>'+
+        '</div>'+
       '</div>'+
+      '<textarea id="asset-h-bnm-rate" placeholder="e.g. 4.4700" disabled rows="2" style="width:100%;min-height:56px;resize:vertical;box-sizing:border-box;"></textarea>'+
     '</div>';
   }
   document.addEventListener('change', (e)=>{
@@ -6296,21 +6434,27 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
 
   function buildHeaderFields(){
     document.getElementById('asset-header-fields').innerHTML =
-      fieldHtml('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
-      fieldHtml('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
-      fieldHtml('Entity', textInput('asset-h-entity','Company name'), 'asset-h-entity') +
-      fieldHtml('BD in-charge', textInput('asset-h-bd','Name'), 'asset-h-bd') +
-      fieldHtml('Supplier', textInput('asset-h-supplier','Supplier name'), 'asset-h-supplier') +
-      fieldHtml('Registry', textInput('asset-h-registry','e.g. TIGR/IREC'), 'asset-h-registry') +
-      fieldHtml('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
-      fieldHtml('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
-      fieldHtml('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
+      lockableField('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
+      lockableField('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
+      lockableField('Entity', textInput('asset-h-entity','Company name'), 'asset-h-entity') +
+      lockableField('BD in-charge', textInput('asset-h-bd','Name'), 'asset-h-bd') +
+      lockableField('Supplier', textInput('asset-h-supplier','Supplier name'), 'asset-h-supplier') +
+      lockableField('Registry', textInput('asset-h-registry','e.g. TIGR/IREC'), 'asset-h-registry') +
+      lockableField('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
+      lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
+      lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
       bnmRateFieldHtml() +
-      fieldHtml('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, ASSET_CURRENCY_OPTIONS[0]), 'asset-h-currency') +
+      lockableField('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, ASSET_CURRENCY_OPTIONS[0]), 'asset-h-currency') +
       '<div style="grid-column:1 / -1;">'+
-        fieldHtml('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
+        lockableField('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
       '</div>';
     refreshAllAssetDateDisplays();
+    // Restore any per-field locks saved earlier, then re-apply a locked
+    // Details section as a whole — same order the Trade tab uses whenever
+    // its own header/trade fields are (re)rendered. Safe to call every time
+    // this function runs (initial load, agreement-type reset, draft load).
+    initLocksIn(document.getElementById('asset-header-fields'));
+    initSectionLock('asset-header');
   }
 
   function syncSegmentedUi(){
@@ -6340,9 +6484,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
         '<div class="grid">'+
-          fieldHtml('Device registration fee (one-time)', amountInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-wrap')+
-          fieldHtml('RECs issuance fee (one-time)', amountInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-wrap')+
-          fieldHtml('Redemption fee (one-time)', amountInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-wrap')+
+          lockableField('Device registration fee (one-time)', amountInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-amt')+
+          lockableField('RECs issuance fee (one-time)', amountInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-amt')+
+          lockableField('Redemption fee (one-time)', amountInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-amt')+
         '</div>'+
         '<div class="trade-count-row" style="margin-top:16px;">'+
           '<label style="margin:0;">Number of years</label>'+
@@ -6355,13 +6499,19 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       titleEl.textContent = 'Pricing & Fees — Profit Sharing';
       body.innerHTML =
         '<div class="grid">'+
-          fieldHtml('Profit Ratio — Saxon (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-saxon" placeholder="e.g. 70"/>', 'asset-ps-ratio-saxon')+
-          fieldHtml('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 30"/>', 'asset-ps-ratio-owner')+
-          fieldHtml('Device registration fee', amountInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-wrap')+
-          fieldHtml('RECs issuance fee', amountInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-wrap')+
-          fieldHtml('Redemption fee', amountInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-wrap')+
+          lockableField('Profit Ratio — Saxon (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-saxon" placeholder="e.g. 70"/>', 'asset-ps-ratio-saxon')+
+          lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 30"/>', 'asset-ps-ratio-owner')+
+          lockableField('Device registration fee', amountInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-amt')+
+          lockableField('RECs issuance fee', amountInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-amt')+
+          lockableField('Redemption fee', amountInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-amt')+
         '</div>';
     }
+    // Restore any per-field locks saved earlier, then re-apply a locked
+    // Pricing & Fees section — same pattern the Details/Products sections
+    // use. Re-run every time this renders (agreement-type switch, draft
+    // load, reset), so a locked section stays locked across those changes.
+    initLocksIn(body);
+    initSectionLock('asset-pricing');
   }
   function onYearCountChange(e){
     let n = parseInt(e.target.value, 10);
@@ -6412,18 +6562,23 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         (yearCount>1 ? '<button type="button" class="remove-row-btn" data-remove-asset-year="'+i+'">Remove</button>' : '')+
         '<p class="trade-title">Year '+i+'</p>'+
         '<div class="grid">'+
-          fieldHtml('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year-wrap');
+          lockableField('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year');
       if(agreementType !== 'Self Manage'){
         html +=
-          fieldHtml('Price / RECs', amountInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-wrap');
+          lockableField('Price / RECs', amountInput('asset-y'+i+'-price', prevPrice[i]), 'asset-y'+i+'-price-amt');
       }
       if(agreementType === 'Self Manage'){
         html +=
-          fieldHtml('Service fee / RECs', amountInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-wrap');
+          lockableField('Service fee / RECs', amountInput('asset-y'+i+'-service-fee', prevSvc[i]), 'asset-y'+i+'-service-fee-amt');
       }
       html += '</div></div>';
     }
     container.innerHTML = html;
+    // Restore/re-apply locks for the freshly-rendered year rows — needed
+    // here too (not just in renderPricingSection()) because "Number of
+    // years" changes and row removal call this function directly.
+    initLocksIn(container);
+    initSectionLock('asset-pricing');
   }
   function copyYearRow(fromIdx, toIdx){
     const fromYear = document.getElementById('asset-y'+fromIdx+'-year');
@@ -6454,9 +6609,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         (productCount>1 ? '<button type="button" class="remove-row-btn" data-remove-asset-product="'+i+'">Remove</button>' : '')+
         '<p class="trade-title">Product '+i+'</p>'+
         '<div class="grid">'+
-          fieldHtml('Device Owner Name', textInput('asset-p'+i+'-owner','Device owner name', prevName[i]), 'asset-p'+i+'-owner-wrap')+
-          fieldHtml('REC Issuance start date', dateInput('asset-p'+i+'-rec-start'), 'asset-p'+i+'-rec-start-wrap')+
-          fieldHtml('COD', dateInput('asset-p'+i+'-cod'), 'asset-p'+i+'-cod-wrap')+
+          lockableField('Device Owner Name', textInput('asset-p'+i+'-owner','Device owner name', prevName[i]), 'asset-p'+i+'-owner')+
+          lockableField('REC Issuance start date', dateInput('asset-p'+i+'-rec-start'), 'asset-p'+i+'-rec-start')+
+          lockableField('COD', dateInput('asset-p'+i+'-cod'), 'asset-p'+i+'-cod')+
         '</div></div>';
     }
     container.innerHTML = html;
@@ -6465,6 +6620,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       if(prevStart[i]){ const el = document.getElementById('asset-p'+i+'-rec-start'); if(el){ el.value = prevStart[i]; updateDateDisplay(el); } }
       if(prevCod[i]){ const el = document.getElementById('asset-p'+i+'-cod'); if(el){ el.value = prevCod[i]; updateDateDisplay(el); } }
     }
+    // Restore per-field locks for the freshly-rendered product blocks, then
+    // re-apply a locked Products section — same pattern renderTrades() uses
+    // for the Single Trade tab's Products section.
+    initLocksIn(container);
+    initSectionLock('asset-products');
   }
 
   document.addEventListener('click', (e)=>{
@@ -6546,11 +6706,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         }
         if(agreementType !== 'Self Manage'){
           const price = amountVal('asset-y'+i+'-price');
-          if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price'); }
+          if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price-amt'); }
         }
         if(agreementType === 'Self Manage'){
           const svc = amountVal('asset-y'+i+'-service-fee');
-          if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee'); }
+          if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee-amt'); }
         }
       }
       if(agreementType === 'Self Manage'){
@@ -6558,7 +6718,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         // for the whole deal, not per-year.
         [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee']].forEach(([id,label])=>{
           const f = amountVal(id);
-          if(!f.amt){ missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id); }
+          if(!f.amt){ missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt'); }
         });
       }
     } else {
@@ -6566,7 +6726,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       if(!val('asset-ps-ratio-owner')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Device Owner (%)'}); markMissing('asset-ps-ratio-owner'); }
       [['asset-ps-device-reg-fee','Device registration fee'],['asset-ps-recs-issuance-fee','RECs issuance fee'],['asset-ps-redemption-fee','Redemption fee']].forEach(([id,label])=>{
         const f = amountVal(id);
-        if(!f.amt){ missing.push({section:'Pricing & Fees', label}); markMissing(id); }
+        if(!f.amt){ missing.push({section:'Pricing & Fees', label}); markMissing(id+'-amt'); }
       });
     }
 
@@ -7073,6 +7233,7 @@ function refreshAssetQueueAndHistoryUi(){
   // combined refresh render all three merged tables.
   lastAssetAllGroups = allGroups;
   refreshCombinedConfirmationTables();
+  tryOpenAssetFromUrl();
 }
 
 /* ==== Merged "My saved confirmations" / "All confirmations" / "Approval
@@ -7535,6 +7696,11 @@ async function saveAssetToLog(){
   await addTableRows(tableName, rowsToWrite);
   await loadAllAssetLogTables();
   checkAssetSubmittedLock();
+  // Same as Trade's initial submit — email whoever holds Level 1 today
+  // that a new asset agreement is waiting on them. "Remarks" is the
+  // closest Asset equivalent of Trade's Commercial Justification/
+  // description field, so it's passed through the same way for context.
+  await notifyNextApproverAsset(STATUS_PENDING_1, assetId, v('asset-h-remarks'));
 }
 
 /* ---- "Asset onboarding approval" SharePoint list ----
@@ -7714,6 +7880,21 @@ async function approveAssetDeal(assetId){
     }
   }
   await loadAllAssetLogTables();
+  // Same notification pattern as Trade's approveDeal: email whoever now
+  // holds the next level, give a courtesy heads-up to the other admins who
+  // shared the level that was just used, and — only on the Level 1
+  // approval that assigns the real Asset ID — let the submitter know it's
+  // ready. No "fully Approved" email, per the same policy as Trade.
+  const idForNotifications = assignedAssetId || assetId;
+  const remarksForNotify = matching[0].values[0][mc.specialRemarks] || '';
+  await notifyNextApproverAsset(nextStatus, idForNotifications, remarksForNotify);
+  const approverRole = APPROVER_ROLE_FOR_STATUS[currentStatus];
+  if(approverRole){
+    await notifyOtherApproversAtLevelAsset(approverRole, idForNotifications, remarksForNotify, currentAccount.username);
+  }
+  if(assignedAssetId){
+    await notifyAssetIdAssigned(assignedAssetId, matching[0].values[0][mc.submittedBy]);
+  }
   if(approvedListErrors.length){
     alert('This asset agreement was approved successfully, but copying ' + approvedListErrors.length + ' of ' + matching.length +
       ' product row(s) into the "Asset onboarding approval" list failed:\n\n' + approvedListErrors.join('\n\n') +
@@ -7740,6 +7921,7 @@ async function rejectAssetDeal(assetId, reason){
     await updateTableRow(tableName, r.index, values);
   }
   await loadAllAssetLogTables();
+  await notifySubmitterAsset(STATUS_REJECTED, assetId, matching[0].values[0][mc.submittedBy], reason);
 }
 
 /* ---- Wire the Save agreement button ---- */
