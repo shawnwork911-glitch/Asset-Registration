@@ -599,7 +599,9 @@
 
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <button id="asset-generate-btn" type="button">Generate table</button>
+    <button id="asset-save-btn" class="secondary" type="button" disabled title="Generate the table first">Save agreement</button>
   </div>
+  <p id="asset-save-note" style="font-size:12px;color:var(--text-secondary);margin:-14px 0 0;display:none;"></p>
 
   <div id="asset-validation-warning" class="warning-box"></div>
 
@@ -610,10 +612,6 @@
     </div>
     <div id="asset-table-preview"></div>
     <p id="asset-copy-status">Copied — paste directly into your email or document.</p>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <button id="asset-save-btn" type="button">Save agreement</button>
-      <span id="asset-save-status" style="font-size:13px;color:var(--text-secondary);"></span>
-    </div>
   </div>
 
   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
@@ -1133,7 +1131,12 @@ const ASSET_ID_START_KEY = "assetIdStart";
 // The new SharePoint list the Asset tab's final (Level 3) approvals get
 // copied into, one row per product — mirrors "BD Agreement Record Approved"
 // above but is a SEPARATE list, created and named exactly as follows.
-const ASSET_APPROVAL_LIST_NAME = "Asset onboarding approval";
+const ASSET_APPROVAL_LIST_NAME = "Asset Approval Record List";
+// Known list GUID (from the list's Settings page URL) — used directly
+// instead of a displayName lookup so a space/rename in the list's title can
+// never break the write. Taken from:
+// https://saxonrenewables.sharepoint.com/sites/Operations/_layouts/15/listedit.aspx?List=%7B8c4f2f44-4662-4c4e-a56b-312772142c0d%7D
+const ASSET_APPROVAL_LIST_ID = "8c4f2f44-4662-4c4e-a56b-312772142c0d";
 
 const GRAPH_SCOPES = ["Sites.ReadWrite.All", "User.Read"];
 // Requested separately from GRAPH_SCOPES, only at the moment an email is
@@ -7067,11 +7070,18 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     return lines.join('\n');
   }
   let lastHtml = '', lastPlain = '';
+  function setAssetSaveEnabled(enabled){
+    const btn = document.getElementById('asset-save-btn');
+    if(!btn) return;
+    btn.disabled = !enabled;
+    btn.title = enabled ? '' : 'Generate the table first';
+  }
   function generateOutput(){
     const missing = validateForm();
     if(missing.length){
       showValidationWarning(missing);
       document.getElementById('asset-output-section').style.display = 'none';
+      setAssetSaveEnabled(false);
       return;
     }
     hideValidationWarning();
@@ -7081,6 +7091,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     document.getElementById('asset-output-section').style.display = 'flex';
     document.getElementById('asset-copy-status').style.display = 'none';
     document.getElementById('asset-output-section').scrollIntoView({behavior:'smooth', block:'nearest'});
+    setAssetSaveEnabled(true);
   }
 
   function resetToBlankForm(){
@@ -7094,6 +7105,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     renderProducts();
     document.getElementById('asset-output-section').style.display = 'none';
     hideValidationWarning();
+    setAssetSaveEnabled(false);
   }
 
   window.initAssetForm = function(){
@@ -7105,6 +7117,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         agreementType = btn.getAttribute('data-type');
         syncSegmentedUi();
         renderPricingSection();
+        setAssetSaveEnabled(false);
       });
     });
     document.getElementById('asset-product-count').addEventListener('input', (e)=>{
@@ -7115,6 +7128,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       renderProducts();
     });
     document.getElementById('asset-generate-btn').addEventListener('click', generateOutput);
+    document.addEventListener('input', (e)=>{
+      if(e.target.closest('#asset-header-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
+    });
+    document.addEventListener('change', (e)=>{
+      if(e.target.closest('#asset-header-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
+    });
     document.getElementById('asset-copy-btn').addEventListener('click', async ()=>{
       try{
         const htmlBlob = new Blob([lastHtml], {type:'text/html'});
@@ -7166,7 +7185,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
 <script>
 /* =========================================================================
    Asset persistence — writes/reads AssetTradeDealLog, AssetTradeDealDrafts,
-   AssetTradeSettings, and the "Asset onboarding approval" SharePoint list.
+   AssetTradeSettings, and the "Asset Approval Record List" SharePoint list.
    Lives in the SAME global scope as the Trade tab's functions above (so it
    reuses getTableRows/addTableRow/updateTableRow/graphFetch/getUserRole/
    canActOnStatus/actionableStatusesForRole/uploadAgreementFile/
@@ -7926,33 +7945,51 @@ async function saveAssetToLog(){
   await notifyNextApproverAsset(STATUS_PENDING_1, assetId, v('asset-h-remarks'));
 }
 
-/* ---- "Asset onboarding approval" SharePoint list ----
+/* ---- "Asset Approval Record List" SharePoint list ----
    Same append-only, one-row-per-product, by-DISPLAY-NAME column lookup
    pattern as addApprovedDealToList/getApprovedListColumnMap — reuses
    coerceForColumnType so numeric/date/text columns on this list all get the
    right shape regardless of how Graph reports the column's type. */
 async function getAssetApprovalListColumnMap(){
   if(assetApprovedListColumnMapCache) return assetApprovedListColumnMapCache;
-  const data = await graphFetch("/sites/" + siteId + "/lists/" + assetApprovedListId + "/columns?$select=name,displayName,hidden,readOnly,text,number,dateTime,boolean,choice");
+  const data = await graphFetch("/sites/" + siteId + "/lists/" + assetApprovedListId + "/columns?$select=name,displayName,hidden,readOnly,text,number,dateTime,boolean,choice,personOrGroup");
   const map = {};
   (data.value || []).forEach(col => {
     if(col.hidden || col.readOnly) return;
     let type = 'text';
-    if(col.number) type = 'number';
+    let meta = {};
+    // Order matters: check the more specific/restrictive shapes before the
+    // generic 'text' fallback, since a misdiagnosed type here is exactly
+    // what produces an opaque Graph 400 with no field name in it.
+    if(col.personOrGroup){
+      // Person/Group columns need a resolved SharePoint user id
+      // ({"ApprovedByLookupId": 12}), not the plain email string this app
+      // has everywhere else — so these are unsupported on this list.
+      // Rename the column to "Single line of text" in SharePoint if you
+      // want the email string to actually land here.
+      type = 'person';
+    } else if(col.choice){
+      type = 'choice';
+      meta.choices = col.choice.choices || [];
+      meta.allowFillIn = !!col.choice.allowFillInValues;
+    } else if(col.number) type = 'number';
     else if(col.dateTime) type = 'dateTime';
     else if(col.boolean) type = 'boolean';
-    map[col.displayName] = { name: col.name, type };
+    else if(col.text){
+      type = col.text.allowMultipleLines ? 'multilineText' : 'text';
+    }
+    map[col.displayName] = { name: col.name, type, meta };
   });
   assetApprovedListColumnMapCache = map;
   return map;
 }
 async function addAssetApprovalToList(agreementType, values){
   if(!assetApprovedListId){
-    assetApprovedListId = await getSharePointListId(ASSET_APPROVAL_LIST_NAME);
+    assetApprovedListId = ASSET_APPROVAL_LIST_ID;
   }
   const columnMap = await getAssetApprovalListColumnMap();
   const mc = ASSET_MC_BY_TYPE[agreementType];
-  // Keyed by the "Asset onboarding approval" list's DISPLAY name — see the
+  // Keyed by the "Asset Approval Record List" list's DISPLAY name — see the
   // column spec in the AssetTradeDealLog example workbook. This list is
   // shared across all 3 agreement types (it's one flat approval log), so
   // "Agreement Type" is passed in explicitly rather than read off `values`
@@ -8031,17 +8068,32 @@ async function addAssetApprovalToList(agreementType, values){
   desiredByDisplayName['RECs Issuance Fee Amount'] = hasOneTimeFees ? values[mc.recsIssuanceFeeAmt] : '';
   desiredByDisplayName['Redemption Fee Amount'] = hasOneTimeFees ? values[mc.redemptionFeeAmt] : '';
   const fields = {};
-  const skipped = [];
+  const skipped = [];       // no column on the list matches this display name at all
+  const typeSkipped = [];   // column exists but its type/value can't be sent as-is
   Object.keys(desiredByDisplayName).forEach(displayName => {
     const col = columnMap[displayName];
-    if(col){
-      fields[col.name] = coerceForColumnType(desiredByDisplayName[displayName], col.type);
-    } else {
-      skipped.push(displayName);
+    if(!col){ skipped.push(displayName); return; }
+    const raw = desiredByDisplayName[displayName];
+    const val = (raw === null || raw === undefined) ? '' : String(raw);
+    if(col.type === 'person'){
+      typeSkipped.push(displayName + ' (column is "Person or Group" — change it to "Single line of text" in the list\'s column settings to receive this email value)');
+      return;
     }
+    if(col.type === 'choice' && val && !col.meta.allowFillIn && col.meta.choices.indexOf(val) === -1){
+      typeSkipped.push(displayName + ' (column is "Choice" and does not have "' + val + '" as an option — add it to the column\'s choices, or turn on "Allow fill-in values")');
+      return;
+    }
+    if(col.type === 'text' && val.length > 255){
+      typeSkipped.push(displayName + ' (value is ' + val.length + ' chars but the column is "Single line of text" — change it to "Multiple lines of text" (plain text) to receive this value)');
+      return;
+    }
+    fields[col.name] = coerceForColumnType(raw, col.type === 'multilineText' ? 'text' : col.type);
   });
   if(skipped.length){
     console.warn('"' + ASSET_APPROVAL_LIST_NAME + '" list has no column matching these labels — skipped: ' + skipped.join(', '));
+  }
+  if(typeSkipped.length){
+    console.warn('"' + ASSET_APPROVAL_LIST_NAME + '" list column type mismatch — these fields were left out of the write so they don\'t break the whole row:\n' + typeSkipped.join('\n'));
   }
   try{
     const created = await graphFetch("/sites/" + siteId + "/lists/" + assetApprovedListId + "/items", {
@@ -8116,7 +8168,7 @@ async function approveAssetDeal(assetId){
           await updateTableRow(tableName, r.index, values);
         }
       }catch(err){
-        console.error('Could not copy Product ' + productNum + ' into the "Asset onboarding approval" list', err);
+        console.error('Could not copy Product ' + productNum + ' into the "Asset Approval Record List" list', err);
         approvedListErrors.push('Product ' + productNum + ': ' + err.message);
       }
     }
@@ -8139,7 +8191,7 @@ async function approveAssetDeal(assetId){
   }
   if(approvedListErrors.length){
     alert('This asset agreement was approved successfully, but copying ' + approvedListErrors.length + ' of ' + matching.length +
-      ' product row(s) into the "Asset onboarding approval" list failed:\n\n' + approvedListErrors.join('\n\n') +
+      ' product row(s) into the "Asset Approval Record List" list failed:\n\n' + approvedListErrors.join('\n\n') +
       '\n\nThe approval itself is saved — this only affects the separate list. Check that its column names/types match what the app sends (see addAssetApprovalToList in the code).');
   }
 }
@@ -8172,14 +8224,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(!btn) return;
   btn.addEventListener('click', async ()=>{
     btn.disabled = true;
-    const status = document.getElementById('asset-save-status');
-    if(status) status.textContent = 'Saving…';
+    const note = document.getElementById('asset-save-note');
+    if(note){ note.textContent = 'Saving…'; note.style.display = 'block'; }
     try{
       await saveAssetToLog();
-      if(status) status.textContent = 'Saved — Asset ID is assigned once Level 1 approves.';
+      if(note){
+        note.textContent = 'Submitted — Asset ID is assigned once Level 1 approves. Starting a new agreement…';
+        note.style.display = 'block';
+      }
+      // Same pattern as Trade's save: give the person a moment to read the
+      // confirmation, then automatically move on to a blank agreement — no
+      // need to click Reset data unless they actually want to wipe locked
+      // fields too.
+      setTimeout(()=>{
+        if(window.assetResetForm) window.assetResetForm();
+        if(note) note.style.display = 'none';
+      }, 1500);
     }catch(err){
       console.error('Save agreement failed', err);
-      if(status) status.textContent = '';
+      if(note) note.style.display = 'none';
       alert('Could not save: ' + err.message);
       btn.disabled = assetAlreadySubmitted(currentAssetDocId);
     }
