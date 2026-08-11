@@ -6402,9 +6402,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   // up being a longer sentence, not just a plain number.
   function bnmRateFieldHtml(){
     return '<div id="asset-h-bnm-rate,asset-h-bnm-rate-toggle-wrap" style="grid-column:1 / -1;">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
-        '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
-          '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:0;"/>BNM Rate'+
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+        '<label style="display:flex;align-items:flex-start;gap:6px;margin:0;cursor:pointer;">'+
+          '<input type="checkbox" id="asset-h-bnm-rate-toggle" style="width:auto;margin:3px 0 0;flex:none;"/>'+
+          '<span>Follow BNM exchange rate on the last working day of the preceding month of the statement issue date, with the middle rate at 1700. If not, please tick and write down the special requests for the BNM rate.</span>'+
         '</label>'+
         '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-rate-toggle" title="Lock this field">🔓</button>'+
       '</div>'+
@@ -6429,6 +6430,47 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const amt = val(id+'-amt');
     return {amt, text: amt || ''};
   }
+  // Self Manage's and Profit Sharing's 3 one-time fees (Device registration
+  // fee / RECs issuance fee / Redemption fee) aren't compulsory — each is a
+  // tick box gating its own amount field, same pattern as the "BNM Rate"
+  // field above: unticked, the amount input is hidden entirely (not just
+  // disabled) and cleared; ticked, it pops into view. `baseId` is the same
+  // id amountInput()/amountVal() already use elsewhere (e.g.
+  // 'asset-sm-device-reg-fee'), so every other place that reads/writes
+  // baseId+'-amt' keeps working unchanged.
+  function feeFieldHtml(label, baseId){
+    const toggleId = baseId+'-toggle';
+    const amtId = baseId+'-amt';
+    return '<div id="'+amtId+','+toggleId+'-wrap">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+        '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
+          '<input type="checkbox" id="'+toggleId+'" class="asset-fee-toggle" data-amt-id="'+amtId+'" style="width:auto;margin:0;"/>'+label+
+        '</label>'+
+        '<button type="button" class="field-lock" data-field="'+amtId+','+toggleId+'" title="Lock this field">🔓</button>'+
+      '</div>'+
+      '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+amtId+'" placeholder="0.00" disabled style="width:100%;margin-top:6px;display:none;"/>'+
+    '</div>';
+  }
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches && e.target.matches('.asset-fee-toggle')){
+      const amtInput = document.getElementById(e.target.getAttribute('data-amt-id'));
+      if(!amtInput) return;
+      amtInput.disabled = !e.target.checked;
+      amtInput.style.display = e.target.checked ? 'block' : 'none';
+      if(!e.target.checked) amtInput.value = '';
+    }
+  });
+  // Profit Ratio only takes a Device Owner (%) entry — Saxon's share is
+  // always the remainder, filled in automatically (e.g. entering 70 for
+  // Device Owner fills 30 for Saxon) rather than typed separately.
+  document.addEventListener('input', (e)=>{
+    if(e.target && e.target.id === 'asset-ps-ratio-owner'){
+      const saxonEl = document.getElementById('asset-ps-ratio-saxon');
+      if(!saxonEl) return;
+      const ownerNum = parseFloat(e.target.value);
+      saxonEl.value = (!isNaN(ownerNum)) ? String(Math.round((100 - ownerNum) * 100) / 100) : '';
+    }
+  });
 
   const DEVICE_STATUS_OPTIONS = ["New","Renew","Transfer"];
 
@@ -6436,10 +6478,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     document.getElementById('asset-header-fields').innerHTML =
       lockableField('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
       lockableField('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
-      lockableField('Entity', textInput('asset-h-entity','Company name'), 'asset-h-entity') +
-      lockableField('BD in-charge', textInput('asset-h-bd','Name'), 'asset-h-bd') +
-      lockableField('Supplier', textInput('asset-h-supplier','Supplier name'), 'asset-h-supplier') +
-      lockableField('Registry', textInput('asset-h-registry','e.g. TIGR/IREC'), 'asset-h-registry') +
+      lockableField('Entity', selectInput('asset-h-entity', ['MY','SG'], 'MY'), 'asset-h-entity') +
+      lockableField('BD in-charge', selectInput('asset-h-bd', BD_NAMES, BD_NAMES[0]), 'asset-h-bd') +
+      lockableField('Device Owner', textInput('asset-h-supplier','Device owner name'), 'asset-h-supplier') +
+      lockableField('Registry', selectWithFullNamesHtml('asset-h-registry', ['IREC','TIGR'], REGISTRY_DISPLAY_NAMES, 'IREC'), 'asset-h-registry') +
       lockableField('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
       lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
       lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
@@ -6466,57 +6508,66 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const titleEl = document.getElementById('asset-pricing-card-title');
     const body = document.getElementById('asset-pricing-body');
     // Currency is one shared field for the whole deal, not per-year — kept
-    // out of the per-type blocks below and rendered once beneath them so it
+    // out of the per-type blocks below and rendered once above them so it
     // reads as its own line, not tied to any single year/fee row. Captured
     // before the innerHTML rewrite so the user's current pick survives an
     // agreement-type switch instead of resetting to the first option.
     const prevCurrency = val('asset-h-currency') || ASSET_CURRENCY_OPTIONS[0];
+    // Rendered first so Currency sits literally right below the "Pricing &
+    // Fees" title, ahead of any of the type-specific content below —
+    // instead of appended after it, which is how this used to work.
     const currencyHtml =
-      '<div class="grid" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">'+
+      '<div class="grid" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border);">'+
         lockableField('Currency', selectInput('asset-h-currency', ASSET_CURRENCY_OPTIONS, prevCurrency), 'asset-h-currency')+
       '</div>';
     if(agreementType === 'Outright Purchase'){
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
+        currencyHtml+
         '<div class="trade-count-row">'+
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
-        '<div id="asset-year-rows" style="margin-top:16px;"></div>'+
-        currencyHtml;
+        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
       renderYearRows();
     } else if(agreementType === 'Self Manage'){
       // Device registration fee / RECs issuance fee / Redemption fee are
       // ONE-TIME for the whole deal (shared design with Profit Sharing) —
       // rendered once above the per-year rows, which now only cover
-      // Price/RECs and Service fee.
+      // Price/RECs and Service fee. None of the three is compulsory, so
+      // each is a tick box that only reveals its amount field once ticked
+      // (see feeFieldHtml) — same pattern as the "BNM Rate" field above.
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
       body.innerHTML =
+        currencyHtml+
         '<div class="grid">'+
-          lockableField('Device registration fee (one-time)', amountInput('asset-sm-device-reg-fee'), 'asset-sm-device-reg-fee-amt')+
-          lockableField('RECs issuance fee (one-time)', amountInput('asset-sm-recs-issuance-fee'), 'asset-sm-recs-issuance-fee-amt')+
-          lockableField('Redemption fee (one-time)', amountInput('asset-sm-redemption-fee'), 'asset-sm-redemption-fee-amt')+
+          feeFieldHtml('Device registration fee (one-time)', 'asset-sm-device-reg-fee')+
+          feeFieldHtml('RECs issuance fee (one-time)', 'asset-sm-recs-issuance-fee')+
+          feeFieldHtml('Redemption fee (one-time)', 'asset-sm-redemption-fee')+
         '</div>'+
         '<div class="trade-count-row" style="margin-top:16px;">'+
           '<label style="margin:0;">Number of years</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
-        '<div id="asset-year-rows" style="margin-top:16px;"></div>'+
-        currencyHtml;
+        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
       renderYearRows();
     } else {
+      // Profit Ratio only takes a Device Owner (%) input — Saxon's share is
+      // derived automatically (100 - Device Owner) via the input listener
+      // below, so the field is readonly rather than user-entered. The 3
+      // one-time fees are tick-box gated, same as Self Manage above.
       titleEl.textContent = 'Pricing & Fees — Profit Sharing';
       body.innerHTML =
+        currencyHtml+
         '<div class="grid">'+
-          lockableField('Profit Ratio — Saxon (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-saxon" placeholder="e.g. 70"/>', 'asset-ps-ratio-saxon')+
-          lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 30"/>', 'asset-ps-ratio-owner')+
-          lockableField('Device registration fee', amountInput('asset-ps-device-reg-fee'), 'asset-ps-device-reg-fee-amt')+
-          lockableField('RECs issuance fee', amountInput('asset-ps-recs-issuance-fee'), 'asset-ps-recs-issuance-fee-amt')+
-          lockableField('Redemption fee', amountInput('asset-ps-redemption-fee'), 'asset-ps-redemption-fee-amt')+
-        '</div>'+
-        currencyHtml;
+          lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" id="asset-ps-ratio-owner" placeholder="e.g. 70"/>', 'asset-ps-ratio-owner')+
+          lockableField('Profit Ratio — Saxon (%)', '<input type="text" id="asset-ps-ratio-saxon" placeholder="Auto-filled" readonly/>', 'asset-ps-ratio-saxon')+
+          feeFieldHtml('Device registration fee', 'asset-ps-device-reg-fee')+
+          feeFieldHtml('RECs issuance fee', 'asset-ps-recs-issuance-fee')+
+          feeFieldHtml('Redemption fee', 'asset-ps-redemption-fee')+
+        '</div>';
     }
     // Restore any per-field locks saved earlier, then re-apply a locked
     // Pricing & Fees section — same pattern the Details/Products sections
@@ -6687,7 +6738,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-agreement-end','Agreement End Date'],
       ['asset-h-entity','Entity'],
       ['asset-h-bd','BD in-charge'],
-      ['asset-h-supplier','Supplier'],
+      ['asset-h-supplier','Device Owner'],
       ['asset-h-registry','Registry'],
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
@@ -6733,18 +6784,26 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       }
       if(agreementType === 'Self Manage'){
         // One-time fees, shared design with Profit Sharing — validated once
-        // for the whole deal, not per-year.
+        // for the whole deal, not per-year. Not compulsory: only required
+        // once its own tick box is checked (see feeFieldHtml).
         [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-          const f = amountVal(id);
-          if(!f.amt){ missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt'); }
+          const toggle = document.getElementById(id+'-toggle');
+          if(toggle && toggle.checked && !amountVal(id).amt){
+            missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt');
+          }
         });
       }
     } else {
-      if(!val('asset-ps-ratio-saxon')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Saxon (%)'}); markMissing('asset-ps-ratio-saxon'); }
+      // Only Device Owner (%) is entered — Saxon's share is auto-filled
+      // (see the input listener next to feeFieldHtml), so only Device
+      // Owner needs to be validated here.
       if(!val('asset-ps-ratio-owner')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Device Owner (%)'}); markMissing('asset-ps-ratio-owner'); }
+      // One-time fees — not compulsory, same as Self Manage above.
       [['asset-ps-device-reg-fee','Device registration fee'],['asset-ps-recs-issuance-fee','RECs issuance fee'],['asset-ps-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-        const f = amountVal(id);
-        if(!f.amt){ missing.push({section:'Pricing & Fees', label}); markMissing(id+'-amt'); }
+        const toggle = document.getElementById(id+'-toggle');
+        if(toggle && toggle.checked && !amountVal(id).amt){
+          missing.push({section:'Pricing & Fees', label}); markMissing(id+'-amt');
+        }
       });
     }
 
@@ -6772,8 +6831,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Agreement End Date', formatDisplayDate(val('asset-h-agreement-end'))]);
     rows.push(['Entity', val('asset-h-entity')]);
     rows.push(['BD in-charge', val('asset-h-bd')]);
-    rows.push(['Supplier', val('asset-h-supplier')]);
-    rows.push(['Registry', val('asset-h-registry')]);
+    rows.push(['Device Owner', val('asset-h-supplier')]);
+    rows.push(['Registry', registryDisplayName(val('asset-h-registry'))]);
     rows.push(['Device status', val('asset-h-device-status')]);
     rows.push(['Agreement Type', agreementType]);
     rows.push(['Payment Term', val('asset-h-payment-term')]);
@@ -6787,6 +6846,13 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     }
     return rows;
   }
+  // Reads a one-time fee's amount for the generated table, same "only
+  // ticked ones count" rule validateForm()/feeFieldHtml() use for the live
+  // form — an unticked fee shows blank rather than a leftover stale value.
+  function feeAmtForRow(id){
+    const toggle = document.getElementById(id+'-toggle');
+    return (toggle && toggle.checked) ? amountVal(id).text : '';
+  }
   function buildPricingSectionData(){
     const out = [];
     if(agreementType === 'Outright Purchase'){
@@ -6795,10 +6861,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         out[0].rows.push([val('asset-y'+i+'-year'), amountVal('asset-y'+i+'-price').text]);
       }
     } else if(agreementType === 'Self Manage'){
+      // Ticked-off fee tick boxes leave their amount blank here too — same
+      // "only shown when applicable" rule the live form now follows.
       out.push({heading:'Self Manage — one-time fees', cols:['Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
-        amountVal('asset-sm-device-reg-fee').text,
-        amountVal('asset-sm-recs-issuance-fee').text,
-        amountVal('asset-sm-redemption-fee').text
+        feeAmtForRow('asset-sm-device-reg-fee'),
+        feeAmtForRow('asset-sm-recs-issuance-fee'),
+        feeAmtForRow('asset-sm-redemption-fee')
       ]]});
       out.push({heading:'Self Manage — yearly', cols:['Year','Service fee'], rows:[]});
       for(let i=1;i<=yearCount;i++){
@@ -6808,18 +6876,18 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         ]);
       }
     } else {
-      out.push({heading:'Profit Sharing', cols:['Profit Ratio (Saxon : Device Owner)','Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
-        val('asset-ps-ratio-saxon')+'% : '+val('asset-ps-ratio-owner')+'%',
-        amountVal('asset-ps-device-reg-fee').text,
-        amountVal('asset-ps-recs-issuance-fee').text,
-        amountVal('asset-ps-redemption-fee').text
+      out.push({heading:'Profit Sharing', cols:['Profit Ratio (Device Owner : Saxon)','Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
+        val('asset-ps-ratio-owner')+'% : '+val('asset-ps-ratio-saxon')+'%',
+        feeAmtForRow('asset-ps-device-reg-fee'),
+        feeAmtForRow('asset-ps-recs-issuance-fee'),
+        feeAmtForRow('asset-ps-redemption-fee')
       ]]});
     }
     // Currency is one shared field for the whole deal, not tied to any
-    // single year/fee row — appended as its own small section here so the
-    // generated table mirrors the live form, where it sits below Pricing &
-    // Fees rather than inside any of the type-specific blocks above.
-    out.push({heading:'Currency', cols:['Currency'], rows:[[val('asset-h-currency')]]});
+    // single year/fee row — placed first here so the generated table
+    // mirrors the live form, where it now sits right below the "Pricing &
+    // Fees" title rather than after any of the type-specific blocks above.
+    out.unshift({heading:'Currency', cols:['Currency'], rows:[[val('asset-h-currency')]]});
     return out;
   }
   function buildProductRows(){
@@ -7127,6 +7195,11 @@ function applyAssetDraftData(data){
   // bnmRateFieldHtml()'s setup).
   const bnmToggleEl = document.getElementById('asset-h-bnm-rate-toggle');
   if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
+  // Same re-sync, for the Self Manage / Profit Sharing one-time fee tick
+  // boxes (see feeFieldHtml()'s change listener).
+  document.querySelectorAll('#tab-panel-asset .asset-fee-toggle').forEach(el=>{
+    el.dispatchEvent(new Event('change'));
+  });
   currentAssetDocId = data.assetId || null;
   currentAssetSubmittedDate = data.submittedDate || null;
   suppressAssetAutosave = false;
