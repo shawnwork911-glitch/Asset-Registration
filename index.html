@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Commercial Approval Form</title>
 <script src="https://unpkg.com/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg:#f5f5f4;
@@ -422,49 +421,6 @@
   #user-mgmt-list table{width:100%;border-collapse:collapse;}
   #user-mgmt-list th{font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);text-align:left;padding:6px;}
   #user-mgmt-list td{padding:6px;font-size:13px;}
-  /* ---- Analysis tab ---- */
-  .confirmation-filter-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;}
-  .confirmation-filter-bar input[type="text"]{flex:1 1 220px;min-width:160px;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);}
-  .confirmation-filter-bar select{padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);}
-  .confirmation-filter-bar button{padding:6px 10px;font-size:12px;}
-  .confirmation-filter-bar input[type="date"]{padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--surface-2);color:var(--text);}
-  .confirmation-filter-count{font-size:11px;color:var(--text-secondary);white-space:nowrap;}
-  .analysis-filter-group-label{font-size:11px;color:var(--text-secondary);font-weight:600;text-transform:uppercase;letter-spacing:.02em;margin-left:4px;}
-  #analysis-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
-  .analysis-stat{flex:1 1 140px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;}
-  .analysis-stat .stat-label{font-size:11px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.03em;}
-  .analysis-stat .stat-value{font-size:22px;font-weight:700;margin-top:4px;}
-  .analysis-stat .stat-sub{font-size:11px;color:var(--text-secondary);margin-top:2px;}
-  #analysis-chart-row{display:flex;gap:28px;flex-wrap:wrap;align-items:center;margin-bottom:20px;}
-  #analysis-donut{width:190px;height:190px;border-radius:50%;flex:none;position:relative;}
-  #analysis-donut::after{
-    content:'';position:absolute;inset:26px;border-radius:50%;background:var(--surface);
-    display:flex;align-items:center;justify-content:center;
-  }
-  #analysis-donut-center{position:absolute;inset:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
-  #analysis-donut-center .n{font-size:22px;font-weight:700;}
-  #analysis-donut-center .l{font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.03em;}
-  #analysis-legend{display:flex;flex-direction:column;gap:8px;min-width:200px;}
-  .analysis-legend-row{display:flex;align-items:center;gap:8px;font-size:13px;}
-  .analysis-legend-swatch{width:11px;height:11px;border-radius:3px;flex:none;}
-  .analysis-legend-pct{margin-left:auto;color:var(--text-secondary);font-size:12px;}
-  #analysis-table-wrap table{width:100%;border-collapse:collapse;}
-  #analysis-table-wrap th{font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);text-align:left;padding:6px;}
-  #analysis-table-wrap td{padding:6px;font-size:13px;border-top:1px solid var(--border);}
-  #asset-analysis-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;}
-  #asset-analysis-chart-row{display:flex;gap:28px;flex-wrap:wrap;align-items:center;margin-bottom:20px;}
-  #asset-analysis-donut{width:190px;height:190px;border-radius:50%;flex:none;position:relative;}
-  #asset-analysis-donut::after{
-    content:'';position:absolute;inset:26px;border-radius:50%;background:var(--surface);
-    display:flex;align-items:center;justify-content:center;
-  }
-  #asset-analysis-donut-center{position:absolute;inset:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
-  #asset-analysis-donut-center .n{font-size:22px;font-weight:700;}
-  #asset-analysis-donut-center .l{font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.03em;}
-  #asset-analysis-legend{display:flex;flex-direction:column;gap:8px;min-width:200px;}
-  #asset-analysis-table-wrap table{width:100%;border-collapse:collapse;}
-  #asset-analysis-table-wrap th{font-size:12px;color:var(--text-secondary);border-bottom:1px solid var(--border);text-align:left;padding:6px;}
-  #asset-analysis-table-wrap td{padding:6px;font-size:13px;border-top:1px solid var(--border);}
   /* ---- Asset tab (added alongside Form / Confirmations) ---- */
   .segmented{display:flex;gap:8px;flex-wrap:wrap;}
   .seg-btn{
@@ -547,7 +503,6 @@
     <button type="button" class="active" id="tab-btn-form" data-tab="form">Single Trade</button>
     <button type="button" id="tab-btn-asset" data-tab="asset">Asset</button>
     <button type="button" id="tab-btn-confirmations" data-tab="confirmations">Confirmations</button>
-    <button type="button" id="tab-btn-analysis" data-tab="analysis">Analysis</button>
     <button type="button" id="tab-btn-usermgmt" data-tab="usermgmt" style="display:none;">User management</button>
     <button type="button" id="tab-btn-dealid" data-tab="dealid" style="display:none;">Deal ID numbering</button>
   </div>
@@ -584,6 +539,7 @@
   <p id="save-note" style="font-size:12px;color:var(--text-secondary);margin:-14px 0 0;display:none;"></p>
 
   <div id="validation-warning" class="warning-box"></div>
+  <div id="regtech-warning" class="warning-box" style="display:none;"></div>
 
   </div>
 
@@ -596,12 +552,20 @@
     </div>
     <div id="table-preview"></div>
     <p id="copy-status">Copied — paste directly into your email.</p>
-    <div id="regtech-warning" class="warning-box" style="display:none;margin-top:12px;"></div>
   </div>
 
   </div><!-- /tab-panel-form -->
 
   <div id="tab-panel-asset" class="tab-panel" style="display:none;">
+
+  <div class="card">
+    <div class="card-title-row">
+      <p class="card-title">Details</p>
+      <button type="button" class="section-lock" data-section="asset-header" title="Lock this whole section">🔓 Lock section</button>
+    </div>
+    <p id="asset-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Details at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <div id="asset-header-fields" class="grid"></div>
+  </div>
 
   <div class="card">
     <p class="card-title">Agreement Type</p>
@@ -611,15 +575,6 @@
       <button type="button" class="seg-btn" data-type="Self Manage">Self Manage</button>
       <button type="button" class="seg-btn" data-type="Profit Sharing">Profit Sharing</button>
     </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title-row">
-      <p class="card-title">Details</p>
-      <button type="button" class="section-lock" data-section="asset-header" title="Lock this whole section">🔓 Lock section</button>
-    </div>
-    <p id="asset-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Details at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
-    <div id="asset-header-fields" class="grid"></div>
   </div>
 
   <div class="card" id="asset-pricing-card">
@@ -763,75 +718,6 @@
   </div>
 
   </div><!-- /tab-panel-confirmations -->
-
-  <div id="tab-panel-analysis" class="tab-panel" style="display:none;">
-
-  <div class="card">
-    <p class="card-title">Confirmations analysis</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Breaks down every saved confirmation (one entry per deal, matching "All confirmations") by status. Pick Single Trade or Asset below — each has its own filters and its own "Export to Excel".</p>
-    <div class="segmented" id="analysis-type-segmented">
-      <button type="button" class="seg-btn active" data-analysis-type="trade">Single Trade</button>
-      <button type="button" class="seg-btn" data-analysis-type="asset">Asset</button>
-    </div>
-  </div>
-
-  <div id="analysis-trade-section">
-  <div class="card">
-    <p class="card-title">Single Trade analysis</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Filterable by BD in-charge, Deal Date, and the date the agreement was created (submitted) by the user. "Export to Excel" downloads exactly the rows shown below.</p>
-    <div class="confirmation-filter-bar">
-      <select id="analysis-filter-bd"><option value="">All BD in-charge</option></select>
-      <span class="analysis-filter-group-label">Deal Date:</span>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">From <input type="date" id="analysis-filter-from"></label>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">To <input type="date" id="analysis-filter-to"></label>
-      <span class="analysis-filter-group-label">Created (Submitted):</span>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">From <input type="date" id="analysis-filter-created-from"></label>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">To <input type="date" id="analysis-filter-created-to"></label>
-      <button type="button" id="analysis-filter-clear" class="secondary">Clear filters</button>
-      <span class="confirmation-filter-count" id="analysis-filter-count"></span>
-      <button type="button" id="analysis-export-btn" class="secondary" style="margin-left:auto;">⬇ Export to Excel</button>
-    </div>
-
-    <div id="analysis-stats"></div>
-
-    <div id="analysis-chart-row">
-      <div id="analysis-donut"><div id="analysis-donut-center"><div class="n" id="analysis-donut-total">0</div><div class="l">deals</div></div></div>
-      <div id="analysis-legend"></div>
-    </div>
-
-    <div id="analysis-table-wrap"><p style="font-size:13px;color:var(--text-secondary);">Loading…</p></div>
-  </div>
-  </div><!-- /analysis-trade-section -->
-
-  <div id="analysis-asset-section" style="display:none;">
-  <div class="card">
-    <p class="card-title">Asset analysis</p>
-    <p style="font-size:12px;color:var(--text-secondary);margin:0 0 10px;">Covers all three Asset agreement types (Outright Purchase, Self Manage, Profit Sharing) together. Filterable by BD in-charge, Agreement Start Date, and the date the agreement was created (submitted) by the user. "Export to Excel" downloads exactly the rows shown below.</p>
-    <div class="confirmation-filter-bar">
-      <select id="asset-analysis-filter-bd"><option value="">All BD in-charge</option></select>
-      <span class="analysis-filter-group-label">Agreement Start:</span>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">From <input type="date" id="asset-analysis-filter-from"></label>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">To <input type="date" id="asset-analysis-filter-to"></label>
-      <span class="analysis-filter-group-label">Created (Submitted):</span>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">From <input type="date" id="asset-analysis-filter-created-from"></label>
-      <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">To <input type="date" id="asset-analysis-filter-created-to"></label>
-      <button type="button" id="asset-analysis-filter-clear" class="secondary">Clear filters</button>
-      <span class="confirmation-filter-count" id="asset-analysis-filter-count"></span>
-      <button type="button" id="asset-analysis-export-btn" class="secondary" style="margin-left:auto;">⬇ Export to Excel</button>
-    </div>
-
-    <div id="asset-analysis-stats"></div>
-
-    <div id="asset-analysis-chart-row">
-      <div id="asset-analysis-donut"><div id="asset-analysis-donut-center"><div class="n" id="asset-analysis-donut-total">0</div><div class="l">deals</div></div></div>
-      <div id="asset-analysis-legend"></div>
-    </div>
-
-    <div id="asset-analysis-table-wrap"><p style="font-size:13px;color:var(--text-secondary);">Loading…</p></div>
-  </div>
-  </div><!-- /analysis-asset-section -->
-
-  </div><!-- /tab-panel-analysis -->
 
   <div id="tab-panel-usermgmt" class="tab-panel" style="display:none;">
   <div class="card" id="user-mgmt-card">
@@ -1138,6 +1024,13 @@ const DEAL_ID_START_KEY = "dealIdStart";
 //   Date, COD.
 //   (There is deliberately NO "Agreement Type" column — the table itself,
 //   i.e. which of the 3 tables a row lives in, already tells you the type.)
+// Also shared across all 3 tables, but appended as the LAST columns of each
+// table instead (via ASSET_DETAILS_EXTRA_KEYS, see below) so adding them
+// didn't shift any pre-existing column: Registration Number, Address,
+// Contact Person, Phone Number, E-Mail, Invoicing Address, Invoicing
+// Same As Address (Yes/blank), Account Department E-Mail, Account
+// Department E-Mail Same As E-Mail (Yes/blank), Bank Name, Bank Account
+// Number.
 // Then, per table:
 //   AssetTradeDealLog_OutrightPurchase adds: Price/RECs Amount for each
 //     fixed year 2020..2030 (11 columns).
@@ -1190,6 +1083,21 @@ function assetHalfYearFeeKeys(prefix){
   return keys;
 }
 const ASSET_ONETIME_FEE_KEYS = ['deviceRegFeeAmt','recsIssuanceFeeAmt','redemptionFeeAmt'];
+// Company/billing detail fields added to the Details section, shared across
+// all 3 agreement types. Appended as `extraKeys` on every one of the 3
+// col maps below (i.e. at the very END of each physical table), NEVER
+// folded into ASSET_SHARED_KEYS — that would shift every column after it in
+// all 3 tables and break already-saved rows. invoicingSameAsAddress and
+// acctDeptEmailSameAsEmail store 'Yes'/'' (same convention as `hybrid`
+// above) to record whether each "Same as ..." tick box was checked, even
+// though the copied value itself also gets written into invoicingAddress /
+// acctDeptEmail at save time.
+const ASSET_DETAILS_EXTRA_KEYS = [
+  'regNumber','address','contactPerson','phoneNumber','email',
+  'invoicingAddress','invoicingSameAsAddress',
+  'acctDeptEmail','acctDeptEmailSameAsEmail',
+  'bankName','bankAccountNumber'
+];
 // `extraKeys` are appended strictly AFTER ASSET_TAIL_KEYS (i.e. as the very
 // last, right-most columns of the physical Excel table) so that adding them
 // later never shifts the position of any pre-existing column — same
@@ -1205,14 +1113,16 @@ function buildAssetColMap(pricingKeys, extraKeys){
 // then the 1H/2H half-year Price/RECs columns.
 const ASSET_OP_EXTRA_KEYS = ['hybrid','profitRatioOwner','profitRatioSaxon']
   .concat(ASSET_ONETIME_FEE_KEYS)
-  .concat(assetHalfYearFeeKeys('price'));
+  .concat(assetHalfYearFeeKeys('price'))
+  .concat(ASSET_DETAILS_EXTRA_KEYS);
 const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'), ASSET_OP_EXTRA_KEYS);
 const ASSET_MC_SM = buildAssetColMap(
   assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS),
-  assetHalfYearFeeKeys('service')
+  assetHalfYearFeeKeys('service').concat(ASSET_DETAILS_EXTRA_KEYS)
 );
 const ASSET_MC_PS = buildAssetColMap(
-  ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS)
+  ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS),
+  ASSET_DETAILS_EXTRA_KEYS
 );
 const ASSET_TABLE_BY_TYPE = {
   'Outright Purchase': 'AssetTradeDealLog_OutrightPurchase',
@@ -1301,10 +1211,6 @@ const STATUS_PENDING_CHANGE_3 = "Pending Change - Level 3";
 // not just the stage they can personally act on (see canActOnStatus for
 // the separate, narrower check that gates the Approve/Reject buttons).
 const PENDING_STATUSES = [STATUS_PENDING_1, STATUS_PENDING_2, STATUS_PENDING_3, STATUS_PENDING_CHANGE_3];
-// Every status a Single Trade confirmation can be in — used by the
-// Analysis tab's donut chart / legend to enumerate slices in a stable
-// order (see ANALYSIS_STATUS_COLORS / renderAnalysisTab below).
-const ALL_CONFIRMATION_STATUSES = [STATUS_PENDING_1, STATUS_PENDING_2, STATUS_PENDING_3, STATUS_PENDING_CHANGE_3, STATUS_APPROVED, STATUS_REJECTED];
 
 /* ---- Deal ID is now only assigned once Level 1 approval happens ----
    Before that, a submitted agreement is tracked internally with a temporary
@@ -1409,38 +1315,17 @@ document.getElementById('signout-btn').addEventListener('click', ()=>{
    stray script/console call while signed in as anything else.*/
 function setActiveTab(tab){
   if((tab === 'usermgmt' || tab === 'dealid') && currentUserRole !== 'superadmin') return;
-  ['form','asset','confirmations','analysis','usermgmt','dealid'].forEach(function(t){
+  ['form','asset','confirmations','usermgmt','dealid'].forEach(function(t){
     const isActive = t === tab;
     document.getElementById('tab-panel-'+t).style.display = isActive ? 'flex' : 'none';
     document.getElementById('tab-btn-'+t).classList.toggle('active', isActive);
   });
-  // Data is kept fresh by loadHistory()/refreshAssetQueueAndHistoryUi()
-  // already; re-render here just in case the filters were touched while
-  // this tab wasn't visible.
-  if(tab === 'analysis'){ renderAnalysisTab(); renderAssetAnalysisTab(); }
 }
 document.getElementById('tab-btn-form').addEventListener('click', ()=> setActiveTab('form'));
 document.getElementById('tab-btn-asset').addEventListener('click', ()=> setActiveTab('asset'));
 document.getElementById('tab-btn-confirmations').addEventListener('click', ()=> setActiveTab('confirmations'));
-document.getElementById('tab-btn-analysis').addEventListener('click', ()=> setActiveTab('analysis'));
 document.getElementById('tab-btn-usermgmt').addEventListener('click', ()=> setActiveTab('usermgmt'));
 document.getElementById('tab-btn-dealid').addEventListener('click', ()=> setActiveTab('dealid'));
-
-/* ---- Analysis tab's own Single Trade / Asset sub-switch ----
-   Purely a UI toggle between the two analysis sections below — both are
-   always kept up to date (see loadHistory/refreshAssetQueueAndHistoryUi),
-   this just decides which one is visible. */
-function setAnalysisSubTab(sub){
-  const isTrade = sub === 'trade';
-  document.getElementById('analysis-trade-section').style.display = isTrade ? 'block' : 'none';
-  document.getElementById('analysis-asset-section').style.display = isTrade ? 'none' : 'block';
-  document.querySelectorAll('#analysis-type-segmented .seg-btn').forEach(function(btn){
-    btn.classList.toggle('active', btn.dataset.analysisType === sub);
-  });
-}
-document.querySelectorAll('#analysis-type-segmented .seg-btn').forEach(function(btn){
-  btn.addEventListener('click', ()=> setAnalysisSubTab(btn.dataset.analysisType));
-});
 
 window.addEventListener('load', async ()=>{
   await msalInstance.initialize();
@@ -3411,230 +3296,12 @@ async function loadHistory(){
     // wins and repaints all three merged tables).
     lastTradeAllGroups = allGroups;
     refreshCombinedConfirmationTables();
-    refreshAnalysisBdOptions();
-    wireAnalysisFilterBar();
-    renderAnalysisTab();
 
     tryOpenDealFromUrl();
   }catch(err){
     listEl.innerHTML = '<p style="font-size:13px;color:#8a2d1f;">Could not load: ' + escapeHtml(err.message) + '</p>';
   }
 }
-
-/* ---- Analysis tab ----
-   Reuses lastTradeAllGroups — the same one-row-per-deal grouping
-   "All confirmations" already builds in loadHistory() above — so this adds
-   no extra Graph calls of its own. Filters by BD in-charge (MC.salesPic)
-   and by Deal Date (MC.agreementDate) range, then breaks the filtered set
-   down by status (one deal = one status, via dealGroupStatus, same rule
-   the rest of the app uses) into a donut chart + a table that can be
-   exported to .xlsx exactly as shown. Covers Single Trade confirmations
-   only (Asset agreements have their own separate table structure). */
-const ANALYSIS_STATUS_COLORS = {
-  [STATUS_PENDING_1]: '#c9962e',
-  [STATUS_PENDING_2]: '#b3811f',
-  [STATUS_PENDING_3]: '#9c6d15',
-  [STATUS_PENDING_CHANGE_3]: '#7a4d9f',
-  [STATUS_APPROVED]: '#1f7a4d',
-  [STATUS_REJECTED]: '#8a2d1f'
-};
-function refreshAnalysisBdOptions(){
-  const sel = document.getElementById('analysis-filter-bd');
-  if(!sel) return;
-  const current = sel.value;
-  const names = Array.from(new Set(
-    (lastTradeAllGroups || [])
-      .map(g => String(g.rows[0].values[0][MC.salesPic] || '').trim())
-      .filter(Boolean)
-  )).sort((a,b)=> a.localeCompare(b));
-  sel.innerHTML = '<option value="">All BD in-charge</option>' +
-    names.map(n => '<option value="'+escapeHtml(n)+'">'+escapeHtml(n)+'</option>').join('');
-  if(names.includes(current)) sel.value = current;
-}
-function wireAnalysisFilterBar(){
-  const bdEl = document.getElementById('analysis-filter-bd');
-  const fromEl = document.getElementById('analysis-filter-from');
-  const toEl = document.getElementById('analysis-filter-to');
-  const createdFromEl = document.getElementById('analysis-filter-created-from');
-  const createdToEl = document.getElementById('analysis-filter-created-to');
-  const clearBtn = document.getElementById('analysis-filter-clear');
-  const exportBtn = document.getElementById('analysis-export-btn');
-  [bdEl, fromEl, toEl, createdFromEl, createdToEl].forEach(el=>{
-    if(!el || el.dataset.wired) return;
-    el.addEventListener('change', renderAnalysisTab);
-    el.dataset.wired = '1';
-  });
-  if(clearBtn && !clearBtn.dataset.wired){
-    clearBtn.addEventListener('click', ()=>{
-      if(bdEl) bdEl.value = '';
-      if(fromEl) fromEl.value = '';
-      if(toEl) toEl.value = '';
-      if(createdFromEl) createdFromEl.value = '';
-      if(createdToEl) createdToEl.value = '';
-      renderAnalysisTab();
-    });
-    clearBtn.dataset.wired = '1';
-  }
-  if(exportBtn && !exportBtn.dataset.wired){ exportBtn.addEventListener('click', exportAnalysisToExcel); exportBtn.dataset.wired = '1'; }
-}
-// Both bounds are inclusive, compared as UTC midnight dates via the
-// existing parseStoredDateToDate helper (handles both Excel serial numbers
-// and ISO-ish strings, same as the rest of the app's date columns).
-function getFilteredAnalysisGroups(){
-  const bd = (document.getElementById('analysis-filter-bd') || {}).value || '';
-  const fromStr = (document.getElementById('analysis-filter-from') || {}).value || '';
-  const toStr = (document.getElementById('analysis-filter-to') || {}).value || '';
-  const createdFromStr = (document.getElementById('analysis-filter-created-from') || {}).value || '';
-  const createdToStr = (document.getElementById('analysis-filter-created-to') || {}).value || '';
-  const fromDate = fromStr ? new Date(fromStr + 'T00:00:00Z') : null;
-  const toDate = toStr ? new Date(toStr + 'T00:00:00Z') : null;
-  const createdFromDate = createdFromStr ? new Date(createdFromStr + 'T00:00:00Z') : null;
-  // "To" dates are inclusive of the whole day picked.
-  const createdToDate = createdToStr ? new Date(createdToStr + 'T23:59:59.999Z') : null;
-  return (lastTradeAllGroups || []).filter(g=>{
-    const v = g.rows[0].values[0];
-    if(bd && String(v[MC.salesPic] || '').trim() !== bd) return false;
-    if(fromDate || toDate){
-      const dealDate = parseStoredDateToDate(v[MC.agreementDate]);
-      if(!dealDate) return false;
-      if(fromDate && dealDate < fromDate) return false;
-      if(toDate && dealDate > toDate) return false;
-    }
-    if(createdFromDate || createdToDate){
-      const createdDate = parseStoredDateToDate(v[MC.submittedDate]);
-      if(!createdDate) return false;
-      if(createdFromDate && createdDate < createdFromDate) return false;
-      if(createdToDate && createdDate > createdToDate) return false;
-    }
-    return true;
-  }).sort((a,b)=> String(b.rows[0].values[0][MC.agreementDate]||'').localeCompare(String(a.rows[0].values[0][MC.agreementDate]||'')));
-}
-function renderAnalysisTab(){
-  const wrap = document.getElementById('analysis-table-wrap');
-  if(!wrap) return; // tab markup not present (shouldn't happen, but keeps loadHistory from throwing)
-  const groups = getFilteredAnalysisGroups();
-  const total = groups.length;
-
-  // ---- status counts ----
-  const counts = {};
-  ALL_CONFIRMATION_STATUSES.forEach(s => counts[s] = 0);
-  groups.forEach(g => { const s = dealGroupStatus(g.rows); counts[s] = (counts[s]||0) + 1; });
-  const approvedCount = counts[STATUS_APPROVED] || 0;
-  const rejectedCount = counts[STATUS_REJECTED] || 0;
-  const pendingCount = total - approvedCount - rejectedCount;
-  const pct = n => total ? Math.round((n/total)*1000)/10 : 0;
-
-  // ---- summary stat cards ----
-  document.getElementById('analysis-stats').innerHTML = [
-    ['Total confirmations', total, ''],
-    ['Approved', approvedCount, pct(approvedCount)+'% of total'],
-    ['Pending (any level)', pendingCount, pct(pendingCount)+'% of total'],
-    ['Rejected', rejectedCount, pct(rejectedCount)+'% of total']
-  ].map(([label, value, sub]) =>
-    '<div class="analysis-stat"><div class="stat-label">'+escapeHtml(label)+'</div>'+
-    '<div class="stat-value">'+value+'</div>'+
-    (sub ? '<div class="stat-sub">'+escapeHtml(sub)+'</div>' : '')+
-    '</div>'
-  ).join('');
-
-  // ---- donut chart (CSS conic-gradient) + legend ----
-  const donut = document.getElementById('analysis-donut');
-  const centerTotal = document.getElementById('analysis-donut-total');
-  centerTotal.textContent = total;
-  const legendEl = document.getElementById('analysis-legend');
-  if(!total){
-    donut.style.background = 'var(--surface-2)';
-    legendEl.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);margin:0;">No confirmations match this filter.</p>';
-  } else {
-    let acc = 0;
-    const stops = [];
-    const legendRows = [];
-    ALL_CONFIRMATION_STATUSES.forEach(status=>{
-      const n = counts[status] || 0;
-      if(!n) return;
-      const color = ANALYSIS_STATUS_COLORS[status] || '#999';
-      const start = (acc/total)*360;
-      acc += n;
-      const end = (acc/total)*360;
-      stops.push(color+' '+start.toFixed(2)+'deg '+end.toFixed(2)+'deg');
-      legendRows.push(
-        '<div class="analysis-legend-row">'+
-          '<span class="analysis-legend-swatch" style="background:'+color+';"></span>'+
-          '<span>'+escapeHtml(status)+'</span>'+
-          '<span class="analysis-legend-pct">'+n+' · '+pct(n)+'%</span>'+
-        '</div>'
-      );
-    });
-    donut.style.background = 'conic-gradient(' + stops.join(', ') + ')';
-    legendEl.innerHTML = legendRows.join('');
-  }
-
-  // ---- data table ----
-  if(!total){
-    wrap.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">No confirmations match this filter.</p>';
-    return;
-  }
-  let html = '<table><tr>' +
-    '<th>BD in-charge</th><th>Deal ID</th><th>Deal Date</th><th>Counterparty</th>' +
-    '<th>Products</th><th>Total No of RECs</th><th>Status</th></tr>';
-  groups.forEach(g=>{
-    const v = g.rows[0].values[0];
-    const status = dealGroupStatus(g.rows);
-    const totalRecs = g.rows.reduce((sum, r)=>{
-      const n = Number(r.values[0][MC.noOfRecs]);
-      return sum + (isFinite(n) ? n : 0);
-    }, 0);
-    html += '<tr>' +
-      '<td>'+escapeHtml(v[MC.salesPic]||'')+'</td>' +
-      '<td>'+(isPendingDealId(v[MC.dealId]) ? '-' : escapeHtml(friendlyDealId(v[MC.dealId])))+'</td>' +
-      '<td>'+escapeHtml(formatStoredDate(v[MC.agreementDate]))+'</td>' +
-      '<td>'+escapeHtml(v[MC.company]||'')+'</td>' +
-      '<td>'+g.rows.length+'</td>' +
-      '<td>'+(totalRecs || '')+'</td>' +
-      '<td>'+statusBadge(status)+'</td>' +
-    '</tr>';
-  });
-  html += '</table>';
-  wrap.innerHTML = html;
-
-  const countEl = document.getElementById('analysis-filter-count');
-  if(countEl){
-    const allTotal = (lastTradeAllGroups || []).length;
-    countEl.textContent = total === allTotal ? '' : ('Showing ' + total + ' of ' + allTotal);
-  }
-}
-function exportAnalysisToExcel(){
-  if(typeof XLSX === 'undefined'){
-    alert('The Excel export library did not load (check your internet connection) — try refreshing the page.');
-    return;
-  }
-  const groups = getFilteredAnalysisGroups();
-  const header = ['BD in-charge', 'Deal ID', 'Deal Date', 'Counterparty', 'Products', 'Total No of RECs', 'Status'];
-  const rows = groups.map(g=>{
-    const v = g.rows[0].values[0];
-    const status = dealGroupStatus(g.rows);
-    const totalRecs = g.rows.reduce((sum, r)=>{
-      const n = Number(r.values[0][MC.noOfRecs]);
-      return sum + (isFinite(n) ? n : 0);
-    }, 0);
-    return [
-      v[MC.salesPic] || '',
-      isPendingDealId(v[MC.dealId]) ? '' : friendlyDealId(v[MC.dealId]),
-      formatStoredDate(v[MC.agreementDate]),
-      v[MC.company] || '',
-      g.rows.length,
-      totalRecs,
-      status
-    ];
-  });
-  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-  ws['!cols'] = [{wch:20},{wch:12},{wch:12},{wch:26},{wch:9},{wch:16},{wch:22}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Analysis');
-  const stamp = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, 'confirmations_analysis_' + stamp + '.xlsx');
-}
-
 function statusBadge(status){
   const s = status || STATUS_PENDING_1;
   const color = s === STATUS_APPROVED ? '#1f7a4d'
@@ -6808,6 +6475,61 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       if(wrap) wrap.classList.remove('field-missing');
     }
   });
+  // "Same as ..." copy field — used for Invoicing Address (copies Address)
+  // and Account Department E-Mail (copies E-Mail). Ticked: the field
+  // becomes readonly and always mirrors the source field's current value
+  // (kept live in sync — see the input listener below, which re-copies on
+  // every keystroke in the source field while ticked). Unticked: the field
+  // becomes freely editable again and keeps whatever value it last had.
+  // `multiline` picks a textarea (for Address-like fields) vs a plain text
+  // input (for E-Mail-like fields).
+  function sameAsFieldHtml(label, id, sourceId, toggleLabel, multiline){
+    const toggleId = id+'-same-toggle';
+    const control = multiline
+      ? '<textarea id="'+id+'" placeholder="N/A" rows="2" style="width:100%;min-height:56px;resize:vertical;box-sizing:border-box;margin-top:6px;"></textarea>'
+      : '<input type="text" id="'+id+'" placeholder="N/A" style="width:100%;margin-top:6px;"/>';
+    return '<div id="'+id+','+toggleId+'-wrap" style="grid-column:1 / -1;">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+        '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
+          '<input type="checkbox" id="'+toggleId+'" class="asset-same-as-toggle" data-target-id="'+id+'" data-source-id="'+sourceId+'" style="width:auto;margin:0;"/>'+
+          '<span>'+label+' <span style="color:var(--text-secondary);font-weight:400;">('+toggleLabel+')</span></span>'+
+        '</label>'+
+        '<button type="button" class="field-lock" data-field="'+id+','+toggleId+'" title="Lock this field">🔓</button>'+
+      '</div>'+
+      control+
+    '</div>';
+  }
+  function syncSameAsField(toggleEl){
+    const targetId = toggleEl.getAttribute('data-target-id');
+    const sourceId = toggleEl.getAttribute('data-source-id');
+    const targetEl = document.getElementById(targetId);
+    const sourceEl = document.getElementById(sourceId);
+    if(!targetEl) return;
+    const wrap = document.getElementById(targetId+','+toggleEl.id+'-wrap');
+    if(toggleEl.checked){
+      targetEl.value = sourceEl ? sourceEl.value : '';
+      targetEl.readOnly = true;
+      targetEl.style.background = 'var(--surface-2)';
+      targetEl.style.color = 'var(--text-secondary)';
+    } else {
+      targetEl.readOnly = false;
+      targetEl.style.background = '';
+      targetEl.style.color = '';
+    }
+    if(wrap) wrap.classList.remove('field-missing');
+  }
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.matches && e.target.matches('.asset-same-as-toggle')) syncSameAsField(e.target);
+  });
+  // Keep a ticked "Same as ..." field live-synced while the person keeps
+  // typing into the source field (Address / E-Mail), rather than only
+  // copying it once at the moment the tick box is checked.
+  document.addEventListener('input', (e)=>{
+    if(!e.target || !e.target.id) return;
+    document.querySelectorAll('.asset-same-as-toggle').forEach(toggleEl=>{
+      if(toggleEl.checked && toggleEl.getAttribute('data-source-id') === e.target.id) syncSameAsField(toggleEl);
+    });
+  });
   function amountInput(id, def){
     return '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+id+'-amt" placeholder="0.00" value="'+escapeHtml(def&&def.amt||'')+'"/>';
   }
@@ -6871,6 +6593,17 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
       lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
       bnmRateFieldHtml() +
+      lockableField('Registration Number', textInput('asset-h-reg-number','Company registration number'), 'asset-h-reg-number') +
+      lockableField('Contact Person', textInput('asset-h-contact-person','Contact person name'), 'asset-h-contact-person') +
+      lockableField('Phone Number', textInput('asset-h-phone','e.g. +60 12-345 6789'), 'asset-h-phone') +
+      lockableField('E-Mail', textInput('asset-h-email','name@company.com'), 'asset-h-email') +
+      lockableField('Bank Name', textInput('asset-h-bank-name','Bank name'), 'asset-h-bank-name') +
+      lockableField('Bank Account Number', textInput('asset-h-bank-account-number','Bank account number'), 'asset-h-bank-account-number') +
+      '<div style="grid-column:1 / -1;">'+
+        lockableField('Address', '<textarea id="asset-h-address" placeholder="N/A" rows="2"></textarea>', 'asset-h-address')+
+      '</div>'+
+      sameAsFieldHtml('Invoicing Address', 'asset-h-invoicing-address', 'asset-h-address', 'tick if same as Address', true) +
+      sameAsFieldHtml('Account Department E-Mail', 'asset-h-acct-dept-email', 'asset-h-email', 'tick if same as E-Mail', false) +
       '<div style="grid-column:1 / -1;">'+
         lockableField('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
       '</div>';
@@ -7189,7 +6922,14 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-registry','Registry'],
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
-      ['asset-h-broker','Broker (if any)']
+      ['asset-h-broker','Broker (if any)'],
+      ['asset-h-reg-number','Registration Number'],
+      ['asset-h-address','Address'],
+      ['asset-h-contact-person','Contact Person'],
+      ['asset-h-phone','Phone Number'],
+      ['asset-h-email','E-Mail'],
+      ['asset-h-bank-name','Bank Name'],
+      ['asset-h-bank-account-number','Bank Account Number']
     ];
     detailFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Details', label}); markMissing(id); }
@@ -7201,6 +6941,22 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       missing.push({section:'Details', label:'BNM Rate'});
       markMissing('asset-h-bnm-rate');
     }
+    // Invoicing Address / Account Department E-Mail: always required, but
+    // when the "Same as ..." tick box is checked they're auto-filled from
+    // Address / E-Mail (see syncSameAsField), so only check the tick box's
+    // source field in that case rather than demanding the reader also fill
+    // in an identical copy by hand.
+    [
+      ['asset-h-invoicing-address','Invoicing Address','asset-h-address'],
+      ['asset-h-acct-dept-email','Account Department E-Mail','asset-h-email']
+    ].forEach(([id,label])=>{
+      const toggle = document.getElementById(id+'-same-toggle');
+      const sourceOk = toggle && toggle.checked ? val(toggle.getAttribute('data-source-id')) : true;
+      if(!val(id) || !sourceOk){
+        missing.push({section:'Details', label});
+        markMissing(id);
+      }
+    });
     // Currency lives under Pricing & Fees now (shared across the whole
     // deal, not tied to any one year/fee row), so it's validated and
     // labelled under that section instead of Details.
@@ -7300,6 +7056,15 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const isHybridForType = !!(agreementType === 'Outright Purchase' && hybridToggleForType && hybridToggleForType.checked);
     rows.push(['Agreement Type', agreementType + (isHybridForType ? ' (Hybrid — Profit Sharing)' : '')]);
     rows.push(['Payment Term', val('asset-h-payment-term')]);
+    rows.push(['Registration Number', val('asset-h-reg-number')]);
+    rows.push(['Address', val('asset-h-address')]);
+    rows.push(['Contact Person', val('asset-h-contact-person')]);
+    rows.push(['Phone Number', val('asset-h-phone')]);
+    rows.push(['E-Mail', val('asset-h-email')]);
+    rows.push(['Invoicing Address', val('asset-h-invoicing-address')]);
+    rows.push(['Account Department E-Mail', val('asset-h-acct-dept-email')]);
+    rows.push(['Bank Name', val('asset-h-bank-name')]);
+    rows.push(['Bank Account Number', val('asset-h-bank-account-number')]);
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     rows.push(['Broker (if any)', val('asset-h-broker') || 'N/A']);
     // BNM Rate is optional — only shown in the generated table when the
@@ -7694,6 +7459,13 @@ function applyAssetDraftData(data){
   document.querySelectorAll('#tab-panel-asset .asset-fee-toggle').forEach(el=>{
     el.dispatchEvent(new Event('change'));
   });
+  // Same re-sync, for the Invoicing Address / Account Department E-Mail
+  // "Same as ..." tick boxes (see sameAsFieldHtml()'s change listener) —
+  // without this, a restored ticked box would show as checked but the
+  // field itself would stay editable/non-greyed until manually toggled.
+  document.querySelectorAll('#tab-panel-asset .asset-same-as-toggle').forEach(el=>{
+    el.dispatchEvent(new Event('change'));
+  });
   currentAssetDocId = data.assetId || null;
   currentAssetSubmittedDate = data.submittedDate || null;
   suppressAssetAutosave = false;
@@ -7822,211 +7594,7 @@ function refreshAssetQueueAndHistoryUi(){
   // combined refresh render all three merged tables.
   lastAssetAllGroups = allGroups;
   refreshCombinedConfirmationTables();
-  refreshAssetAnalysisBdOptions();
-  wireAssetAnalysisFilterBar();
-  renderAssetAnalysisTab();
   tryOpenAssetFromUrl();
-}
-
-/* ---- Analysis tab: Asset side ----
-   Mirrors the Single Trade analysis block (refreshAnalysisBdOptions /
-   wireAnalysisFilterBar / getFilteredAnalysisGroups / renderAnalysisTab /
-   exportAnalysisToExcel above) but reads lastAssetAllGroups instead —
-   each group there already carries its own agreement type + column map
-   (g.type / g.mc, see buildAllAssetGroups), since Asset is split across 3
-   physical tables with 3 different column layouts. Covers all three
-   agreement types (Outright Purchase / Self Manage / Profit Sharing)
-   together in one chart/table. */
-function assetGroupStatus(g){
-  return (g.rows[0] && g.rows[0].values[0][g.mc.status]) || STATUS_PENDING_1;
-}
-function refreshAssetAnalysisBdOptions(){
-  const sel = document.getElementById('asset-analysis-filter-bd');
-  if(!sel) return;
-  const current = sel.value;
-  const names = Array.from(new Set(
-    (lastAssetAllGroups || [])
-      .map(g => String(g.rows[0].values[0][g.mc.bdInCharge] || '').trim())
-      .filter(Boolean)
-  )).sort((a,b)=> a.localeCompare(b));
-  sel.innerHTML = '<option value="">All BD in-charge</option>' +
-    names.map(n => '<option value="'+escapeHtml(n)+'">'+escapeHtml(n)+'</option>').join('');
-  if(names.includes(current)) sel.value = current;
-}
-function wireAssetAnalysisFilterBar(){
-  const bdEl = document.getElementById('asset-analysis-filter-bd');
-  const fromEl = document.getElementById('asset-analysis-filter-from');
-  const toEl = document.getElementById('asset-analysis-filter-to');
-  const createdFromEl = document.getElementById('asset-analysis-filter-created-from');
-  const createdToEl = document.getElementById('asset-analysis-filter-created-to');
-  const clearBtn = document.getElementById('asset-analysis-filter-clear');
-  const exportBtn = document.getElementById('asset-analysis-export-btn');
-  [bdEl, fromEl, toEl, createdFromEl, createdToEl].forEach(el=>{
-    if(!el || el.dataset.wired) return;
-    el.addEventListener('change', renderAssetAnalysisTab);
-    el.dataset.wired = '1';
-  });
-  if(clearBtn && !clearBtn.dataset.wired){
-    clearBtn.addEventListener('click', ()=>{
-      if(bdEl) bdEl.value = '';
-      if(fromEl) fromEl.value = '';
-      if(toEl) toEl.value = '';
-      if(createdFromEl) createdFromEl.value = '';
-      if(createdToEl) createdToEl.value = '';
-      renderAssetAnalysisTab();
-    });
-    clearBtn.dataset.wired = '1';
-  }
-  if(exportBtn && !exportBtn.dataset.wired){ exportBtn.addEventListener('click', exportAssetAnalysisToExcel); exportBtn.dataset.wired = '1'; }
-}
-// Both bounds are inclusive, compared as UTC midnight dates via the
-// existing parseStoredDateToDate helper. "Agreement Start" is the Asset
-// equivalent of Trade's Deal Date.
-function getFilteredAssetAnalysisGroups(){
-  const bd = (document.getElementById('asset-analysis-filter-bd') || {}).value || '';
-  const fromStr = (document.getElementById('asset-analysis-filter-from') || {}).value || '';
-  const toStr = (document.getElementById('asset-analysis-filter-to') || {}).value || '';
-  const createdFromStr = (document.getElementById('asset-analysis-filter-created-from') || {}).value || '';
-  const createdToStr = (document.getElementById('asset-analysis-filter-created-to') || {}).value || '';
-  const fromDate = fromStr ? new Date(fromStr + 'T00:00:00Z') : null;
-  const toDate = toStr ? new Date(toStr + 'T00:00:00Z') : null;
-  const createdFromDate = createdFromStr ? new Date(createdFromStr + 'T00:00:00Z') : null;
-  // "To" dates are inclusive of the whole day picked.
-  const createdToDate = createdToStr ? new Date(createdToStr + 'T23:59:59.999Z') : null;
-  return (lastAssetAllGroups || []).filter(g=>{
-    const v = g.rows[0].values[0];
-    if(bd && String(v[g.mc.bdInCharge] || '').trim() !== bd) return false;
-    if(fromDate || toDate){
-      const dealDate = parseStoredDateToDate(v[g.mc.agreementStart]);
-      if(!dealDate) return false;
-      if(fromDate && dealDate < fromDate) return false;
-      if(toDate && dealDate > toDate) return false;
-    }
-    if(createdFromDate || createdToDate){
-      const createdDate = parseStoredDateToDate(v[g.mc.submittedDate]);
-      if(!createdDate) return false;
-      if(createdFromDate && createdDate < createdFromDate) return false;
-      if(createdToDate && createdDate > createdToDate) return false;
-    }
-    return true;
-  }).sort((a,b)=> String(b.rows[0].values[0][b.mc.agreementStart]||'').localeCompare(String(a.rows[0].values[0][a.mc.agreementStart]||'')));
-}
-function renderAssetAnalysisTab(){
-  const wrap = document.getElementById('asset-analysis-table-wrap');
-  if(!wrap) return; // tab markup not present (shouldn't happen, but keeps refreshAssetQueueAndHistoryUi from throwing)
-  const groups = getFilteredAssetAnalysisGroups();
-  const total = groups.length;
-
-  // ---- status counts ----
-  const counts = {};
-  ALL_CONFIRMATION_STATUSES.forEach(s => counts[s] = 0);
-  groups.forEach(g => { const s = assetGroupStatus(g); counts[s] = (counts[s]||0) + 1; });
-  const approvedCount = counts[STATUS_APPROVED] || 0;
-  const rejectedCount = counts[STATUS_REJECTED] || 0;
-  const pendingCount = total - approvedCount - rejectedCount;
-  const pct = n => total ? Math.round((n/total)*1000)/10 : 0;
-
-  // ---- summary stat cards ----
-  document.getElementById('asset-analysis-stats').innerHTML = [
-    ['Total agreements', total, ''],
-    ['Approved', approvedCount, pct(approvedCount)+'% of total'],
-    ['Pending (any level)', pendingCount, pct(pendingCount)+'% of total'],
-    ['Rejected', rejectedCount, pct(rejectedCount)+'% of total']
-  ].map(([label, value, sub]) =>
-    '<div class="analysis-stat"><div class="stat-label">'+escapeHtml(label)+'</div>'+
-    '<div class="stat-value">'+value+'</div>'+
-    (sub ? '<div class="stat-sub">'+escapeHtml(sub)+'</div>' : '')+
-    '</div>'
-  ).join('');
-
-  // ---- donut chart (CSS conic-gradient) + legend ----
-  const donut = document.getElementById('asset-analysis-donut');
-  const centerTotal = document.getElementById('asset-analysis-donut-total');
-  centerTotal.textContent = total;
-  const legendEl = document.getElementById('asset-analysis-legend');
-  if(!total){
-    donut.style.background = 'var(--surface-2)';
-    legendEl.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);margin:0;">No agreements match this filter.</p>';
-  } else {
-    let acc = 0;
-    const stops = [];
-    const legendRows = [];
-    ALL_CONFIRMATION_STATUSES.forEach(status=>{
-      const n = counts[status] || 0;
-      if(!n) return;
-      const color = ANALYSIS_STATUS_COLORS[status] || '#999';
-      const start = (acc/total)*360;
-      acc += n;
-      const end = (acc/total)*360;
-      stops.push(color+' '+start.toFixed(2)+'deg '+end.toFixed(2)+'deg');
-      legendRows.push(
-        '<div class="analysis-legend-row">'+
-          '<span class="analysis-legend-swatch" style="background:'+color+';"></span>'+
-          '<span>'+escapeHtml(status)+'</span>'+
-          '<span class="analysis-legend-pct">'+n+' · '+pct(n)+'%</span>'+
-        '</div>'
-      );
-    });
-    donut.style.background = 'conic-gradient(' + stops.join(', ') + ')';
-    legendEl.innerHTML = legendRows.join('');
-  }
-
-  // ---- data table ----
-  if(!total){
-    wrap.innerHTML = '<p style="font-size:13px;color:var(--text-secondary);">No agreements match this filter.</p>';
-    return;
-  }
-  let html = '<table><tr>' +
-    '<th>BD in-charge</th><th>Asset ID</th><th>Agreement Start</th><th>Entity</th>' +
-    '<th>Agreement Type</th><th>Products</th><th>Status</th></tr>';
-  groups.forEach(g=>{
-    const v = g.rows[0].values[0];
-    const status = assetGroupStatus(g);
-    html += '<tr>' +
-      '<td>'+escapeHtml(v[g.mc.bdInCharge]||'')+'</td>' +
-      '<td>'+(isPendingAssetId(g.assetId) ? '-' : escapeHtml(friendlyAssetId(g.assetId)))+'</td>' +
-      '<td>'+escapeHtml(formatStoredDate(v[g.mc.agreementStart]))+'</td>' +
-      '<td>'+escapeHtml(v[g.mc.entity]||'')+'</td>' +
-      '<td>'+escapeHtml(g.type||'')+'</td>' +
-      '<td>'+g.rows.length+'</td>' +
-      '<td>'+statusBadge(status)+'</td>' +
-    '</tr>';
-  });
-  html += '</table>';
-  wrap.innerHTML = html;
-
-  const countEl = document.getElementById('asset-analysis-filter-count');
-  if(countEl){
-    const allTotal = (lastAssetAllGroups || []).length;
-    countEl.textContent = total === allTotal ? '' : ('Showing ' + total + ' of ' + allTotal);
-  }
-}
-function exportAssetAnalysisToExcel(){
-  if(typeof XLSX === 'undefined'){
-    alert('The Excel export library did not load (check your internet connection) — try refreshing the page.');
-    return;
-  }
-  const groups = getFilteredAssetAnalysisGroups();
-  const header = ['BD in-charge', 'Asset ID', 'Agreement Start', 'Entity', 'Agreement Type', 'Products', 'Status'];
-  const rows = groups.map(g=>{
-    const v = g.rows[0].values[0];
-    const status = assetGroupStatus(g);
-    return [
-      v[g.mc.bdInCharge] || '',
-      isPendingAssetId(g.assetId) ? '' : friendlyAssetId(g.assetId),
-      formatStoredDate(v[g.mc.agreementStart]),
-      v[g.mc.entity] || '',
-      g.type || '',
-      g.rows.length,
-      status
-    ];
-  });
-  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
-  ws['!cols'] = [{wch:20},{wch:12},{wch:14},{wch:26},{wch:16},{wch:9},{wch:22}];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Asset Analysis');
-  const stamp = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, 'asset_agreements_analysis_' + stamp + '.xlsx');
 }
 
 /* ==== Merged "My saved confirmations" / "All confirmations" / "Approval
@@ -8444,6 +8012,19 @@ async function saveAssetToLog(){
     row[mc.bnmRate] = v('asset-h-bnm-rate');
     row[mc.currency] = v('asset-h-currency');
     row[mc.specialRemarks] = v('asset-h-remarks') || 'N/A';
+    row[mc.regNumber] = v('asset-h-reg-number');
+    row[mc.address] = v('asset-h-address');
+    row[mc.contactPerson] = v('asset-h-contact-person');
+    row[mc.phoneNumber] = v('asset-h-phone');
+    row[mc.email] = v('asset-h-email');
+    row[mc.invoicingAddress] = v('asset-h-invoicing-address');
+    const invoicingSameToggle = document.getElementById('asset-h-invoicing-address-same-toggle');
+    row[mc.invoicingSameAsAddress] = (invoicingSameToggle && invoicingSameToggle.checked) ? 'Yes' : '';
+    row[mc.acctDeptEmail] = v('asset-h-acct-dept-email');
+    const acctDeptEmailSameToggle = document.getElementById('asset-h-acct-dept-email-same-toggle');
+    row[mc.acctDeptEmailSameAsEmail] = (acctDeptEmailSameToggle && acctDeptEmailSameToggle.checked) ? 'Yes' : '';
+    row[mc.bankName] = v('asset-h-bank-name');
+    row[mc.bankAccountNumber] = v('asset-h-bank-account-number');
     row[mc.deviceOwnerName] = v('asset-p'+i+'-owner');
     row[mc.recIssuanceStart] = v('asset-p'+i+'-rec-start');
     row[mc.cod] = v('asset-p'+i+'-cod');
@@ -8580,6 +8161,15 @@ async function addAssetApprovalToList(agreementType, values){
     'BNM Rate': values[mc.bnmRate],
     'Currency': values[mc.currency],
     'Special Remarks': values[mc.specialRemarks],
+    'Registration Number': values[mc.regNumber],
+    'Address': values[mc.address],
+    'Contact Person': values[mc.contactPerson],
+    'Phone Number': values[mc.phoneNumber],
+    'E-Mail': values[mc.email],
+    'Invoicing Address': values[mc.invoicingAddress],
+    'Account Department E-Mail': values[mc.acctDeptEmail],
+    'Bank Name': values[mc.bankName],
+    'Bank Account Number': values[mc.bankAccountNumber],
     'Device Owner Name': values[mc.deviceOwnerName],
     'REC Issuance Start Date': values[mc.recIssuanceStart],
     'COD': values[mc.cod],
