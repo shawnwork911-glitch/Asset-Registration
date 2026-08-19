@@ -560,11 +560,20 @@
 
   <div class="card">
     <div class="card-title-row">
-      <p class="card-title">Details</p>
-      <button type="button" class="section-lock" data-section="asset-header" title="Lock this whole section">🔓 Lock section</button>
+      <p class="card-title">Company</p>
+      <button type="button" class="section-lock" data-section="asset-company" title="Lock this whole section">🔓 Lock section</button>
     </div>
-    <p id="asset-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Details at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
-    <div id="asset-header-fields" class="grid"></div>
+    <p id="asset-company-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Company at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <div id="asset-company-fields" class="grid"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title-row">
+      <p class="card-title">Agreement</p>
+      <button type="button" class="section-lock" data-section="asset-agreement" title="Lock this whole section">🔓 Lock section</button>
+    </div>
+    <p id="asset-agreement-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Agreement at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <div id="asset-agreement-fields" class="grid"></div>
   </div>
 
   <div class="card">
@@ -4557,7 +4566,8 @@ function writeSectionLockState(state){
 function getSectionContainer(section){
   if(section === 'header') return document.getElementById('header-fields');
   if(section === 'trades') return document.getElementById('trades-container');
-  if(section === 'asset-header') return document.getElementById('asset-header-fields');
+  if(section === 'asset-company') return document.getElementById('asset-company-fields');
+  if(section === 'asset-agreement') return document.getElementById('asset-agreement-fields');
   if(section === 'asset-pricing') return document.getElementById('asset-pricing-body');
   if(section === 'asset-products') return document.getElementById('asset-products-container');
   return null;
@@ -6587,17 +6597,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   const DEVICE_STATUS_OPTIONS = ["New","Renew","Transfer"];
 
   function buildHeaderFields(){
-    document.getElementById('asset-header-fields').innerHTML =
-      lockableField('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
-      lockableField('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
-      lockableField('Entity', selectInput('asset-h-entity', ['MY','SG'], 'MY'), 'asset-h-entity') +
-      lockableField('BD in-charge', selectInput('asset-h-bd', BD_NAMES, BD_NAMES[0]), 'asset-h-bd') +
-      lockableField('Device Owner', textInput('asset-h-supplier','Device owner name'), 'asset-h-supplier') +
-      lockableField('Registry', selectWithFullNamesHtml('asset-h-registry', ['IREC','TIGR'], REGISTRY_DISPLAY_NAMES, 'IREC'), 'asset-h-registry') +
-      lockableField('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
-      lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
-      lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
-      bnmRateFieldHtml() +
+    document.getElementById('asset-company-fields').innerHTML =
       lockableField('Registration Number', textInput('asset-h-reg-number','Company registration number'), 'asset-h-reg-number') +
       lockableField('Contact Person', textInput('asset-h-contact-person','Contact person name'), 'asset-h-contact-person') +
       lockableField('Phone Number', textInput('asset-h-phone','e.g. +60 12-345 6789'), 'asset-h-phone') +
@@ -6608,17 +6608,33 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         lockableField('Address', '<textarea id="asset-h-address" placeholder="N/A" rows="2"></textarea>', 'asset-h-address')+
       '</div>'+
       sameAsFieldHtml('Invoicing Address', 'asset-h-invoicing-address', 'asset-h-address', 'tick if same as Address', true) +
-      sameAsFieldHtml('Account Department E-Mail', 'asset-h-acct-dept-email', 'asset-h-email', 'tick if same as E-Mail', false) +
+      sameAsFieldHtml('Account Department E-Mail', 'asset-h-acct-dept-email', 'asset-h-email', 'tick if same as E-Mail', false);
+
+    document.getElementById('asset-agreement-fields').innerHTML =
+      lockableField('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
+      lockableField('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
+      lockableField('Entity', selectInput('asset-h-entity', ['MY','SG'], 'MY'), 'asset-h-entity') +
+      lockableField('BD in-charge', selectInput('asset-h-bd', BD_NAMES, BD_NAMES[0]), 'asset-h-bd') +
+      lockableField('Device Owner', textInput('asset-h-supplier','Device owner name'), 'asset-h-supplier') +
+      lockableField('Registry', selectWithFullNamesHtml('asset-h-registry', ['IREC','TIGR'], REGISTRY_DISPLAY_NAMES, 'IREC'), 'asset-h-registry') +
+      lockableField('Device status', selectInput('asset-h-device-status', DEVICE_STATUS_OPTIONS, DEVICE_STATUS_OPTIONS[0]), 'asset-h-device-status') +
+      lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
+      lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
+      bnmRateFieldHtml() +
       '<div style="grid-column:1 / -1;">'+
         lockableField('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
       '</div>';
+
     refreshAllAssetDateDisplays();
     // Restore any per-field locks saved earlier, then re-apply a locked
-    // Details section as a whole — same order the Trade tab uses whenever
-    // its own header/trade fields are (re)rendered. Safe to call every time
-    // this function runs (initial load, agreement-type reset, draft load).
-    initLocksIn(document.getElementById('asset-header-fields'));
-    initSectionLock('asset-header');
+    // Company/Agreement section as a whole — same order the Trade tab uses
+    // whenever its own header/trade fields are (re)rendered. Safe to call
+    // every time this function runs (initial load, agreement-type reset,
+    // draft load).
+    initLocksIn(document.getElementById('asset-company-fields'));
+    initLocksIn(document.getElementById('asset-agreement-fields'));
+    initSectionLock('asset-company');
+    initSectionLock('asset-agreement');
   }
 
   function syncSegmentedUi(){
@@ -6918,7 +6934,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   }
   function validateForm(){
     const missing = [];
-    const detailFields = [
+    const agreementFields = [
       ['asset-h-agreement-start','Agreement Start Date'],
       ['asset-h-agreement-end','Agreement End Date'],
       ['asset-h-entity','Entity'],
@@ -6927,7 +6943,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-registry','Registry'],
       ['asset-h-device-status','Device status'],
       ['asset-h-payment-term','Payment Term'],
-      ['asset-h-broker','Broker (if any)'],
+      ['asset-h-broker','Broker (if any)']
+    ];
+    agreementFields.forEach(([id,label])=>{
+      if(!val(id)){ missing.push({section:'Agreement', label}); markMissing(id); }
+    });
+    const companyFields = [
       ['asset-h-reg-number','Registration Number'],
       ['asset-h-address','Address'],
       ['asset-h-contact-person','Contact Person'],
@@ -6936,14 +6957,14 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-bank-name','Bank Name'],
       ['asset-h-bank-account-number','Bank Account Number']
     ];
-    detailFields.forEach(([id,label])=>{
-      if(!val(id)){ missing.push({section:'Details', label}); markMissing(id); }
+    companyFields.forEach(([id,label])=>{
+      if(!val(id)){ missing.push({section:'Company', label}); markMissing(id); }
     });
     // BNM Rate is only required when "Applicable" is ticked — see
     // bnmRateFieldHtml().
     const bnmToggle = document.getElementById('asset-h-bnm-rate-toggle');
     if(bnmToggle && bnmToggle.checked && !val('asset-h-bnm-rate')){
-      missing.push({section:'Details', label:'BNM Rate'});
+      missing.push({section:'Agreement', label:'BNM Rate'});
       markMissing('asset-h-bnm-rate');
     }
     // Invoicing Address / Account Department E-Mail: always required, but
@@ -6958,13 +6979,13 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       const toggle = document.getElementById(id+'-same-toggle');
       const sourceOk = toggle && toggle.checked ? val(toggle.getAttribute('data-source-id')) : true;
       if(!val(id) || !sourceOk){
-        missing.push({section:'Details', label});
+        missing.push({section:'Company', label});
         markMissing(id);
       }
     });
     // Currency lives under Pricing & Fees now (shared across the whole
     // deal, not tied to any one year/fee row), so it's validated and
-    // labelled under that section instead of Details.
+    // labelled under that section instead of Company/Agreement.
     if(!val('asset-h-currency')){
       missing.push({section:'Pricing & Fees', label:'Currency'});
       markMissing('asset-h-currency');
@@ -7256,10 +7277,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     });
     document.getElementById('asset-generate-btn').addEventListener('click', generateOutput);
     document.addEventListener('input', (e)=>{
-      if(e.target.closest('#asset-header-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
+      if(e.target.closest('#asset-company-fields, #asset-agreement-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
     });
     document.addEventListener('change', (e)=>{
-      if(e.target.closest('#asset-header-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
+      if(e.target.closest('#asset-company-fields, #asset-agreement-fields, #asset-products-container, #asset-pricing-body') || e.target.id==='asset-product-count') setAssetSaveEnabled(false);
     });
     document.getElementById('asset-copy-btn').addEventListener('click', async ()=>{
       try{
