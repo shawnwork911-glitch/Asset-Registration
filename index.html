@@ -3927,7 +3927,12 @@ document.addEventListener('click', (e)=>{
 });
 
 
-const COUNTRIES = ["MY","BN","CN","JP","SA","TH","IN","PH","SG","VN","INDO","AUS","TW"];
+// All 2-letter codes now (previously AU/ID were the 2-letter forms of what
+// used to be typed/suggested as the 3-4 letter "AUS"/"INDO" — see
+// COUNTRY_FULLNAMES below, which still recognizes AUS/INDO too so any
+// already-saved rows using the old codes keep showing the right country
+// name; only the suggestions offered going forward have changed).
+const COUNTRIES = ["MY","BN","CN","JP","SA","TH","IN","PH","SG","VN","ID","AU","TW"];
 const TECHS = ["ANY","SLR","GEO","BIO","HYD","BGS","SHY","LHY","WND"];
 
 // Hardcoded code -> full name lookups for the Customer version output (per
