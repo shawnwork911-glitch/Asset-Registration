@@ -908,6 +908,13 @@ const SP_FILE_NAME = "BD Agreement Record.xlsx";
 // grab its "Copy link" URL again and paste it in here — nothing else in
 // resolveWorkbook needs to change.
 const SP_FILE_SHARE_URL = "https://saxonrenewables.sharepoint.com/:x:/s/Operations/IQCIkW5tgJWPQJB1t7KiWT7KAaDp_pqoAmZigGQ9UbvBQME?e=dquVG0";
+// The Asset tab reads/writes a SEPARATE workbook file from the one above —
+// "Asset Registration Record.xlsx" — not a sheet inside BD Agreement
+// Record.xlsx. Same resolve-from-share-link approach as SP_FILE_SHARE_URL;
+// if this file ever moves, grab its "Copy link" (or address-bar) URL again
+// and paste it in here — nothing else needs to change.
+const ASSET_SP_FILE_NAME = "Asset Registration Record.xlsx";
+const ASSET_SP_FILE_SHARE_URL = "https://saxonrenewables.sharepoint.com/:x:/r/sites/Operations/_layouts/15/Doc.aspx?sourcedoc=%7B7D3544E9-9AB1-4E2D-8EF1-22E5EEB331BF%7D&file=Asset%20Registration%20Record.xlsx&action=default&mobileredirect=true";
 const STANDARD_LOG_TABLE_NAME = "TradeDealLog";
 const CC_LOG_TABLE_NAME = "TradeDealLog7"; // Excel Table on the workbook's CCDealLog sheet
 // Column layout of the restructured TradeDealLog "main list" table.
@@ -1289,6 +1296,11 @@ let currentAccount = null;
 let siteId = null;
 let fileItemId = null;
 let driveId = null;
+// Identity of the SEPARATE Asset Registration Record.xlsx workbook — kept
+// apart from fileItemId/driveId above (which are BD Agreement Record.xlsx)
+// so Trade/CC calls and Asset calls can never accidentally cross over.
+let assetFileItemId = null;
+let assetDriveId = null;
 let currentDealDocId = null;
 // The submittedDate written to this user's own rows at Save agreement time.
 // Deal ID placeholder -> real swap happens (by a different user, the Level 1
@@ -1428,13 +1440,24 @@ async function onSignedIn(){
     await createWorkbookSession();
     await loadUserRoles();
     await loadDealIdSettings();
-    await loadAssetIdSettings();
     applyRoleUi();
     await loadDraftAndHistory();
-    await loadAssetDraftAndHistory();
   }catch(err){
     console.error('Could not connect to the workbook', err);
     setDraftStatus('Could not connect to SharePoint: ' + err.message);
+  }
+  // Kept in its own try/catch: a problem reaching the separate Asset
+  // Registration Record.xlsx workbook shouldn't take down the Trade/CC
+  // tabs, which already connected successfully above.
+  try{
+    await resolveAssetWorkbook();
+    await createAssetWorkbookSession();
+    await loadAssetIdSettings();
+    applyRoleUi();
+    await loadAssetDraftAndHistory();
+  }catch(err){
+    console.error('Could not connect to the Asset workbook', err);
+    setAssetDraftStatus('Could not connect to SharePoint: ' + err.message);
   }
 }
 
@@ -1948,6 +1971,14 @@ async function getAccessToken(scopes){
 async function graphFetch(path, options){
   options = options || {};
   const isWorkbookCall = path.indexOf('/workbook/') !== -1;
+  // Two separate workbook files (BD Agreement Record.xlsx and Asset
+  // Registration Record.xlsx) are in play, each with its own Excel session —
+  // sending the wrong file's session-id is treated by Graph as an invalid
+  // session, so figure out which file this call targets from its path
+  // (workbookTablePath()/resolveAssetWorkbook() always build asset-workbook
+  // paths with '/drives/{assetDriveId}/items/{assetFileItemId}/').
+  const isAssetWorkbookCall = isWorkbookCall && assetDriveId && assetFileItemId &&
+    path.indexOf('/drives/' + assetDriveId + '/items/' + assetFileItemId + '/') === 0;
   // Workbook calls get one extra attempt over plain Graph calls: a
   // session-expired recovery (recreate + retry) consumes an attempt on its
   // own, so without the extra headroom a call that expires once has no
@@ -1956,7 +1987,10 @@ async function graphFetch(path, options){
   for(let attempt = 0; attempt < maxAttempts; attempt++){
     const token = await getAccessToken(options.scopes);
     const headers = Object.assign({ 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, options.headers || {});
-    if(isWorkbookCall && workbookSessionId) headers['workbook-session-id'] = workbookSessionId;
+    if(isWorkbookCall){
+      const sid = isAssetWorkbookCall ? assetWorkbookSessionId : workbookSessionId;
+      if(sid) headers['workbook-session-id'] = sid;
+    }
     const res = await fetch('https://graph.microsoft.com/v1.0' + path, {
       method: options.method || 'GET',
       body: options.body,
@@ -1974,7 +2008,8 @@ async function graphFetch(path, options){
     // rather than surfacing an error the person can't do anything about.
     const sessionExpired = isWorkbookCall && /InvalidSession|SessionNotFound|invalidSessionReCreatable|DeploymentInvalidEditSession/i.test(text);
     if(sessionExpired && !isLastAttempt){
-      await createWorkbookSession();
+      if(isAssetWorkbookCall) await createAssetWorkbookSession();
+      else await createWorkbookSession();
       continue;
     }
     // 504/503/429 are transient server-side conditions (Graph/Excel backend
@@ -1996,6 +2031,13 @@ async function graphFetch(path, options){
 // it ever expires mid-session (see the sessionExpired branch above).
 let workbookSessionId = null;
 let workbookSessionCreatedAt = 0;
+// Separate session for the separate Asset Registration Record.xlsx
+// workbook — Excel sessions are scoped to one specific file, so the main
+// workbookSessionId above must never be sent on Asset-workbook calls (and
+// vice versa). graphFetch() picks between the two based on which file's
+// driveId/fileItemId the request path targets.
+let assetWorkbookSessionId = null;
+let assetWorkbookSessionCreatedAt = 0;
 async function createWorkbookSession(){
   if(!fileItemId || !driveId) return null;
   try{
@@ -2022,6 +2064,32 @@ async function createWorkbookSession(){
     return null;
   }
 }
+async function createAssetWorkbookSession(){
+  if(!assetFileItemId || !assetDriveId) return null;
+  try{
+    const token = await getAccessToken(GRAPH_SCOPES);
+    const res = await fetch('https://graph.microsoft.com/v1.0/drives/' + assetDriveId + '/items/' + assetFileItemId + '/workbook/createSession', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ persistChanges: true })
+    });
+    if(!res.ok){
+      console.warn('Could not create an Asset workbook session (Graph ' + res.status + ') — falling back to session-less calls, which are slower and more timeout-prone.');
+      assetWorkbookSessionId = null;
+      assetWorkbookSessionCreatedAt = 0;
+      return null;
+    }
+    const data = await res.json();
+    assetWorkbookSessionId = data.id;
+    assetWorkbookSessionCreatedAt = Date.now();
+    return assetWorkbookSessionId;
+  }catch(err){
+    console.warn('Could not create an Asset workbook session — falling back to session-less calls, which are slower and more timeout-prone.', err);
+    assetWorkbookSessionId = null;
+    assetWorkbookSessionCreatedAt = 0;
+    return null;
+  }
+}
 // Excel workbook sessions expire after ~5 min idle. Multi-step flows like
 // approveDeal/rejectDeal/approveBdMatchChange do several sequential Graph
 // calls — re-check status, upload a file, add/update rows — that can add up
@@ -2033,6 +2101,12 @@ async function ensureFreshWorkbookSession(maxAgeMs){
   maxAgeMs = maxAgeMs || 3 * 60 * 1000; // refresh proactively at 3 min, well under the ~5 min idle cap
   if(!workbookSessionId || (Date.now() - workbookSessionCreatedAt) > maxAgeMs){
     await createWorkbookSession();
+  }
+}
+async function ensureFreshAssetWorkbookSession(maxAgeMs){
+  maxAgeMs = maxAgeMs || 3 * 60 * 1000;
+  if(!assetWorkbookSessionId || (Date.now() - assetWorkbookSessionCreatedAt) > maxAgeMs){
+    await createAssetWorkbookSession();
   }
 }
 function encodeShareUrl(url){
@@ -2199,7 +2273,59 @@ async function resolveWorkbook(){
   fileItemId = match.id;
   driveId = match.parentReference.driveId;
 }
+// Same approach as resolveWorkbook() above, but for the separate Asset
+// Registration Record.xlsx file the Asset tab uses. Kept as its own
+// function (rather than a param on resolveWorkbook) so a problem finding
+// one file never blocks the other from resolving.
+async function resolveAssetWorkbook(){
+  try{
+    const item = await graphFetch('/shares/' + encodeShareUrl(ASSET_SP_FILE_SHARE_URL) + '/driveItem?$select=id,parentReference,name');
+    assetFileItemId = item.id;
+    assetDriveId = item.parentReference.driveId;
+    if(!siteId) siteId = item.parentReference.siteId || null;
+    return;
+  }catch(shareErr){
+    if(/Graph 403/.test(shareErr.message)){
+      throw new Error('You don\'t have permission to open "' + ASSET_SP_FILE_NAME + '" on SharePoint. Ask an admin to grant you at least Read access to that file, then sign in again.');
+    }
+    console.warn('Asset workbook share-link lookup failed, falling back to site search', shareErr);
+  }
+  if(!siteId){
+    const site = await graphFetch('/sites/' + SP_HOSTNAME + ':' + SP_SITE_PATH);
+    siteId = site.id;
+  }
+  try{
+    const match = await graphFetch('/sites/' + siteId + '/drive/root:/' + encodeURIComponent(ASSET_SP_FILE_NAME));
+    assetFileItemId = match.id;
+    assetDriveId = match.parentReference.driveId;
+    return;
+  }catch(pathErr){
+    if(/Graph 403/.test(pathErr.message)){
+      throw new Error('You don\'t have permission to open "' + ASSET_SP_FILE_NAME + '" on SharePoint. Ask an admin to grant you at least Read access to that file (or the Operations site), then sign in again.');
+    }
+  }
+  const search = await graphFetch('/sites/' + siteId + "/drive/root/search(q='" + encodeURIComponent(ASSET_SP_FILE_NAME) + "')");
+  const match = (search.value || []).find(f => f.name === ASSET_SP_FILE_NAME);
+  if(!match) throw new Error('Could not find "' + ASSET_SP_FILE_NAME + '" in the Operations site. If you can see this file yourself in SharePoint, you may still be missing permission on it — ask an admin to check your access, then sign in again.');
+  assetFileItemId = match.id;
+  assetDriveId = match.parentReference.driveId;
+}
+// Table names that live in the separate Asset Registration Record.xlsx
+// workbook rather than BD Agreement Record.xlsx. workbookTablePath() below
+// routes to the right file's driveId/fileItemId based on membership here —
+// every other caller (getTableRows/addTableRow/etc.) stays unchanged.
+const ASSET_WORKBOOK_TABLE_NAMES = new Set([
+  ASSET_DRAFT_TABLE_NAME,
+  ASSET_SETTINGS_TABLE_NAME,
+  ASSET_TABLE_BY_TYPE['Outright Purchase'],
+  ASSET_TABLE_BY_TYPE['Self Manage'],
+  ASSET_TABLE_BY_TYPE['Profit Sharing']
+]);
 function workbookTablePath(tableName){
+  if(ASSET_WORKBOOK_TABLE_NAMES.has(tableName)){
+    if(!assetFileItemId || !assetDriveId) throw new Error('Not connected to the Asset Registration workbook yet — try refreshing the page.');
+    return '/drives/' + assetDriveId + '/items/' + assetFileItemId + '/workbook/tables/' + encodeURIComponent(tableName);
+  }
   if(!fileItemId || !driveId) throw new Error('Not connected to the SharePoint workbook yet — try refreshing the page.');
   return '/drives/' + driveId + '/items/' + fileItemId + '/workbook/tables/' + encodeURIComponent(tableName);
 }
@@ -9369,6 +9495,7 @@ async function findAssetRowGroupLive(assetId){
    final. ---- */
 async function approveAssetDeal(assetId){
   if(!assetId) return;
+  await ensureFreshAssetWorkbookSession();
   const group = await findAssetRowGroupLive(assetId);
   if(!group) return;
   const { type, tableName, mc, rows: matching } = group;
@@ -9439,6 +9566,7 @@ async function rejectAssetDeal(assetId, reason){
   const trimmedReason = (reason||'').trim();
   if(!trimmedReason) throw new Error('A comment is required so the submitter knows why this was rejected.');
   reason = trimmedReason;
+  await ensureFreshAssetWorkbookSession();
   const group = await findAssetRowGroupLive(assetId);
   if(!group) return;
   const { tableName, mc, rows: matching } = group;
