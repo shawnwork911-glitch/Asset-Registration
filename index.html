@@ -8127,14 +8127,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       syncAssetBrokerUi();
     }
   });
+  // Residential — Yes/No dropdown. Stored as Y / N (same values the
+  // earlier tick box saved, so old and new rows read the same way).
   function residentialFieldHtml(){
-    return '<div id="asset-h-residential-wrap">'+
-      '<div class="field-label-row"><label>&nbsp;</label>'+
-        '<button type="button" class="field-lock" data-field="asset-h-residential" title="Lock this field">🔓</button></div>'+
-      '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;min-height:36px;">'+
-        '<input type="checkbox" id="asset-h-residential" style="width:auto;margin:0;"/> Residential'+
-      '</label>'+
-    '</div>';
+    return lockableField('Residential', selectWithFullNamesHtml('asset-h-residential', ['Y','N'], {'Y':'Yes','N':'No'}, 'N'), 'asset-h-residential');
   }
   document.addEventListener('change', (e)=>{
     if(e.target && e.target.id === 'asset-h-bnm-standard-toggle'){
@@ -8766,8 +8762,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Device Country', val('asset-h-device-country')]);
     rows.push(['Fuel', val('asset-h-fuel')]);
     rows.push(['Device status', val('asset-h-device-status')]);
-    const residentialEl = document.getElementById('asset-h-residential');
-    rows.push(['Residential', (residentialEl && residentialEl.checked) ? 'Y' : 'N']);
+    rows.push(['Residential', val('asset-h-residential') === 'Y' ? 'Yes' : 'No']);
     rows.push(['Min Commitment Volume', val('asset-h-min-commitment-volume')]);
     const hybridToggleForType = document.getElementById('asset-op-hybrid-toggle');
     const isHybridForType = !!(agreementType === 'Outright Purchase' && hybridToggleForType && hybridToggleForType.checked);
@@ -9201,6 +9196,10 @@ function applyAssetDraftData(data){
       if(el && av[id] !== undefined) el.value = av[id];
     });
   }
+  // Drafts saved while Residential was a tick box hold true/false.
+  const resEl = document.getElementById('asset-h-residential');
+  const resOld = (data.allValues || {})['asset-h-residential'];
+  if(resEl && typeof resOld === 'boolean') resEl.value = resOld ? 'Y' : 'N';
   const bnmToggleEl = document.getElementById('asset-h-bnm-standard-toggle');
   if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
   // Re-sync Hybrid's shown/hidden Profit Sharing terms block, same reason.
@@ -9415,8 +9414,7 @@ async function saveAssetToLog(){
     row[mc.companyDeviceOwnerName] = v('asset-h-company-device-owner');
     row[mc.swiftCode] = v('asset-h-swift-code');
     row[mc.financeEmail] = v('asset-h-finance-email');
-    const residentialToggle = document.getElementById('asset-h-residential');
-    row[mc.residential] = (residentialToggle && residentialToggle.checked) ? 'Y' : 'N';
+    row[mc.residential] = v('asset-h-residential') === 'Y' ? 'Y' : 'N';
     row[mc.deviceCountry] = v('asset-h-device-country');
     row[mc.fuel] = v('asset-h-fuel');
     row[mc.minCommitmentVolume] = v('asset-h-min-commitment-volume');
