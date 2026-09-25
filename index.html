@@ -651,7 +651,7 @@
       <p class="card-title">Agreement</p>
       <button type="button" class="section-lock" data-section="asset-agreement" title="Lock this whole section">🔓 Lock section</button>
     </div>
-    <p id="asset-agreement-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Agreement at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <p id="asset-agreement-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Agreement at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of devices. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
     <div id="asset-agreement-fields" class="grid"></div>
   </div>
 
@@ -660,7 +660,7 @@
       <p class="card-title">Company</p>
       <button type="button" class="section-lock" data-section="asset-company" title="Lock this whole section">🔓 Lock section</button>
     </div>
-    <p id="asset-company-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Company at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of products. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <p id="asset-company-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Company at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of devices. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
     <div id="asset-company-fields" class="grid"></div>
   </div>
 
@@ -674,11 +674,11 @@
 
   <div class="card">
     <div class="card-title-row">
-      <p class="card-title">Products</p>
+      <p class="card-title">Device</p>
       <button type="button" class="section-lock" data-section="asset-products" title="Lock this whole section">🔓 Lock section</button>
     </div>
     <div class="trade-count-row">
-      <label style="margin:0;">Number of products</label>
+      <label style="margin:0;">Number of devices</label>
       <input type="number" id="asset-product-count" min="1" max="50" step="1" value="1" inputmode="numeric"/>
     </div>
     <div id="asset-products-container" style="margin-top:16px;"></div>
@@ -1165,6 +1165,10 @@ const ASSET_PRODUCT_EXTRA_KEYS_V3 = [
   'schemeType','capacityMwac','coordinate','assetAddressLine','assetCityState',
   'recIssuanceEnd'
 ];
+// Fourth batch — Broker Fees (same "Broker involved" tick box + Price/REC or
+// Fixed price structure as the RECs tab). Appended after the third batch.
+// The broker NAME keeps using the existing shared 'broker' column.
+const ASSET_BROKER_FEE_KEYS_V4 = ['brokerFeeType','brokerFeeCurrency','brokerFeePrice'];
 // Company/billing detail fields added to the Details section, shared across
 // all 3 agreement types. Appended as `extraKeys` on every one of the 3
 // col maps below (i.e. at the very END of each physical table), NEVER
@@ -1179,7 +1183,7 @@ const ASSET_DETAILS_EXTRA_KEYS = [
   'invoicingAddress','invoicingSameAsAddress',
   'acctDeptEmail','acctDeptEmailSameAsEmail',
   'bankName','bankAccountNumber'
-].concat(ASSET_DETAILS_EXTRA_KEYS_V2, ASSET_PRODUCT_EXTRA_KEYS_V3);
+].concat(ASSET_DETAILS_EXTRA_KEYS_V2, ASSET_PRODUCT_EXTRA_KEYS_V3, ASSET_BROKER_FEE_KEYS_V4);
 // `extraKeys` are appended strictly AFTER ASSET_TAIL_KEYS (i.e. as the very
 // last, right-most columns of the physical Excel table) so that adding them
 // later never shifts the position of any pre-existing column — same
@@ -8047,17 +8051,82 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     // standard BNM formula applies and 'Y' is saved. Unticked, the textarea
     // appears and the BD must type in the full details of the required BNM
     // rate instead (validateForm() then requires it).
-    return '<div id="asset-h-bnm-rate,asset-h-bnm-rate-toggle-wrap" style="grid-column:1 / -1;">'+
+    return '<div id="asset-h-bnm-rate,asset-h-bnm-standard-toggle-wrap" style="grid-column:1 / -1;">'+
       '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
         '<label style="display:flex;align-items:flex-start;gap:6px;margin:0;cursor:pointer;flex:1;min-width:0;">'+
-          '<input type="checkbox" id="asset-h-bnm-rate-toggle" checked style="width:auto;margin:3px 0 0;flex:none;"/>'+
+          '<input type="checkbox" id="asset-h-bnm-standard-toggle" checked style="width:auto;margin:3px 0 0;flex:none;"/>'+
           '<span>BNM Rate (Standard) <span style="color:var(--text-secondary);font-weight:400;">— follow BNM exchange rate on the last working day of the preceding month of the statement issue date, with the middle rate at 1700. Untick if a different BNM rate is required.</span></span>'+
         '</label>'+
-        '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-rate-toggle" title="Lock this field">🔓</button>'+
+        '<button type="button" class="field-lock" data-field="asset-h-bnm-rate,asset-h-bnm-standard-toggle" title="Lock this field">🔓</button>'+
       '</div>'+
       '<textarea id="asset-h-bnm-rate" placeholder="BD to insert the full details of the required BNM rate (based on the std BNM formula)" disabled rows="2" style="width:100%;min-height:56px;resize:vertical;box-sizing:border-box;margin-top:6px;display:none;"></textarea>'+
     '</div>';
   }
+  // Broker — mirrors the RECs tab: a "Broker involved" tick box that, once
+  // ticked, reveals Broker name + Broker Fees (Price/REC or Fixed price,
+  // mutually exclusive), and once a fee type is picked, Currency + Price.
+  // Unticking clears everything underneath so nothing stale gets saved.
+  function brokerFieldHtml(){
+    return '<div style="grid-column:1 / -1;">'+
+        lockableField('Broker',
+          '<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text);cursor:pointer;font-weight:400;margin:0;">'+
+            '<input type="checkbox" id="asset-h-broker-toggle" style="width:auto;margin:0;"/> Broker involved'+
+          '</label>', 'asset-h-broker-toggle')+
+      '</div>'+
+      '<div id="asset-h-broker-details" style="display:none;grid-column:1 / -1;">'+
+        '<div class="grid" style="margin-bottom:12px;">'+
+          lockableField('Broker name', textInput('asset-h-broker','Broker name'), 'asset-h-broker')+
+        '</div>'+
+        lockableField('Broker Fees',
+          '<div style="display:flex;gap:20px;flex-wrap:wrap;">'+
+            '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:400;margin:0;"><input type="checkbox" class="asset-broker-fee-type" id="asset-h-broker-fee-per-rec" data-value="Price/REC" style="width:auto;margin:0;"/> Price/REC</label>'+
+            '<label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;font-weight:400;margin:0;"><input type="checkbox" class="asset-broker-fee-type" id="asset-h-broker-fee-fixed" data-value="Fixed price" style="width:auto;margin:0;"/> Fixed price</label>'+
+          '</div>', ['asset-h-broker-fee-per-rec','asset-h-broker-fee-fixed'])+
+        '<div class="grid" id="asset-h-broker-fee-fields" style="display:none;margin-top:12px;">'+
+          lockableField('Currency', selectInput('asset-h-broker-fee-currency', CURRENCIES, 'USD'), 'asset-h-broker-fee-currency')+
+          lockableField('<span id="asset-h-broker-fee-price-label">Price / REC</span>', '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="asset-h-broker-fee-price" placeholder="e.g. 0.10"/>', 'asset-h-broker-fee-price')+
+        '</div>'+
+      '</div>';
+  }
+  function assetBrokerFeeType(){
+    const t = document.getElementById('asset-h-broker-toggle');
+    if(!t || !t.checked) return '';
+    const cb = document.querySelector('.asset-broker-fee-type:checked');
+    return cb ? cb.getAttribute('data-value') : '';
+  }
+  // Brings the shown/hidden parts in line with the tick boxes (and clears
+  // anything hidden). Called on every change and after a draft restore.
+  function syncAssetBrokerUi(){
+    const toggle = document.getElementById('asset-h-broker-toggle');
+    const details = document.getElementById('asset-h-broker-details');
+    if(!toggle || !details) return;
+    const on = toggle.checked;
+    details.style.display = on ? 'block' : 'none';
+    if(!on){
+      const nameEl = document.getElementById('asset-h-broker'); if(nameEl) nameEl.value = '';
+      document.querySelectorAll('.asset-broker-fee-type').forEach(cb=>{ cb.checked = false; });
+    }
+    const feeType = assetBrokerFeeType();
+    const feeFields = document.getElementById('asset-h-broker-fee-fields');
+    if(feeFields) feeFields.style.display = feeType ? 'grid' : 'none';
+    const priceLabel = document.getElementById('asset-h-broker-fee-price-label');
+    if(priceLabel) priceLabel.textContent = feeType === 'Fixed price' ? 'Fixed price' : 'Price / REC';
+    if(!feeType){
+      const cur = document.getElementById('asset-h-broker-fee-currency'); if(cur) cur.value = 'USD';
+      const price = document.getElementById('asset-h-broker-fee-price'); if(price) price.value = '';
+    }
+  }
+  window.assetSyncBrokerUi = syncAssetBrokerUi;
+  document.addEventListener('change', (e)=>{
+    if(!e.target) return;
+    if(e.target.id === 'asset-h-broker-toggle'){ syncAssetBrokerUi(); return; }
+    if(e.target.classList && e.target.classList.contains('asset-broker-fee-type')){
+      if(e.target.checked){
+        document.querySelectorAll('.asset-broker-fee-type').forEach(o=>{ if(o !== e.target) o.checked = false; });
+      }
+      syncAssetBrokerUi();
+    }
+  });
   function residentialFieldHtml(){
     return '<div id="asset-h-residential-wrap">'+
       '<div class="field-label-row"><label>&nbsp;</label>'+
@@ -8068,14 +8137,14 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     '</div>';
   }
   document.addEventListener('change', (e)=>{
-    if(e.target && e.target.id === 'asset-h-bnm-rate-toggle'){
+    if(e.target && e.target.id === 'asset-h-bnm-standard-toggle'){
       const rateInput = document.getElementById('asset-h-bnm-rate');
       if(!rateInput) return;
       const standard = e.target.checked;
       rateInput.disabled = standard;
       rateInput.style.display = standard ? 'none' : 'block';
       if(standard) rateInput.value = '';
-      const wrap = document.getElementById('asset-h-bnm-rate,asset-h-bnm-rate-toggle-wrap');
+      const wrap = document.getElementById('asset-h-bnm-rate,asset-h-bnm-standard-toggle-wrap');
       if(wrap) wrap.classList.remove('field-missing');
     }
   });
@@ -8217,7 +8286,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       residentialFieldHtml() +
       lockableField('Min Commitment Volume', textInput('asset-h-min-commitment-volume','e.g. 1,000 RECs'), 'asset-h-min-commitment-volume') +
       lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
-      lockableField('Broker (if any)', textInput('asset-h-broker','N/A','N/A'), 'asset-h-broker') +
+      brokerFieldHtml() +
       bnmRateFieldHtml() +
       '<div style="grid-column:1 / -1;">'+
         lockableField('Special Remarks', '<textarea id="asset-h-remarks" placeholder="N/A"></textarea>', 'asset-h-remarks')+
@@ -8233,6 +8302,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     initLocksIn(document.getElementById('asset-agreement-fields'));
     initSectionLock('asset-company');
     initSectionLock('asset-agreement');
+    syncAssetBrokerUi();
   }
 
   function syncSegmentedUi(){
@@ -8283,7 +8353,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           '</div>'+
         '</div>'+
         '<div class="trade-count-row">'+
-          '<label style="margin:0;">Number of years</label>'+
+          '<label style="margin:0;">Year Selections</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
         '<div id="asset-year-rows" style="margin-top:16px;"></div>';
@@ -8310,7 +8380,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           feeFieldHtml('Redemption fee (one-time)', 'asset-sm-redemption-fee')+
         '</div>'+
         '<div class="trade-count-row" style="margin-top:16px;">'+
-          '<label style="margin:0;">Number of years</label>'+
+          '<label style="margin:0;">Year Selections</label>'+
           '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
         '</div>'+
         '<div id="asset-year-rows" style="margin-top:16px;"></div>';
@@ -8422,7 +8492,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       const yearVal = prevYear[i] || '';
       html += '<div class="trade-block">'+
         (yearCount>1 ? '<button type="button" class="remove-row-btn" data-remove-asset-year="'+i+'">Remove</button>' : '')+
-        '<p class="trade-title">Year '+i+'</p>'+
+        '<p class="trade-title">Selection '+i+'</p>'+
         '<div class="grid">'+
           lockableField('Year', '<select id="asset-y'+i+'-year">'+assetYearOptionsHtml(yearVal)+'</select>', 'asset-y'+i+'-year');
       if(agreementType !== 'Self Manage'){
@@ -8475,12 +8545,12 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       const id = sfx => 'asset-p'+i+'-'+sfx;
       html += '<div class="trade-block">'+
         (productCount>1 ? '<button type="button" class="remove-row-btn" data-remove-asset-product="'+i+'">Remove</button>' : '')+
-        '<p class="trade-title">Product '+i+'</p>'+
+        '<p class="trade-title">Device '+i+'</p>'+
         '<div class="grid">'+
           lockableField('Device Owner Name', textInput(id('owner'),'Device owner name'), id('owner'))+
           lockableField('Scheme Type', selectInput(id('scheme-type'), ASSET_SCHEME_TYPES, ASSET_SCHEME_TYPES[0]), id('scheme-type'))+
           lockableField('Capacity (MWac)', '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+id('capacity')+'" placeholder="e.g. 1.5"/>', id('capacity'))+
-          lockableField('Coordinate', textInput(id('coordinate'),'e.g. 3.0738, 101.5183'), id('coordinate'))+
+          lockableField('Coordinate', textInput(id('coordinate'),'e.g. 3.073812, 101.518346'), id('coordinate'))+
           '<div style="grid-column:1 / -1;">'+
             lockableField('Asset Address Line', textInput(id('asset-address'),'Street / lot address'), id('asset-address'))+
           '</div>'+
@@ -8556,8 +8626,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       ['asset-h-fuel','Fuel'],
       ['asset-h-device-status','Device status'],
       ['asset-h-min-commitment-volume','Min Commitment Volume'],
-      ['asset-h-payment-term','Payment Term'],
-      ['asset-h-broker','Broker (if any)']
+      ['asset-h-payment-term','Payment Term']
     ];
     agreementFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Agreement', label}); markMissing(id); }
@@ -8578,12 +8647,23 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     companyFields.forEach(([id,label])=>{
       if(!val(id)){ missing.push({section:'Company', label}); markMissing(id); }
     });
+    // Broker — same rules as the RECs tab: name + a fee type when ticked,
+    // plus Currency and Price once a fee type is picked.
+    const brokerToggle = document.getElementById('asset-h-broker-toggle');
+    if(brokerToggle && brokerToggle.checked){
+      if(!val('asset-h-broker')){ missing.push({section:'Agreement', label:'Broker name'}); markMissing('asset-h-broker'); }
+      if(!assetBrokerFeeType()){ missing.push({section:'Agreement', label:'Broker Fees (choose Price/REC, or Fixed price)'}); markMissing('asset-h-broker-fee-per-rec,asset-h-broker-fee-fixed'); }
+      else{
+        if(!val('asset-h-broker-fee-currency')){ missing.push({section:'Agreement', label:'Broker Fee Currency'}); markMissing('asset-h-broker-fee-currency'); }
+        if(!val('asset-h-broker-fee-price')){ missing.push({section:'Agreement', label:'Broker Fee Price'}); markMissing('asset-h-broker-fee-price'); }
+      }
+    }
     // BNM Rate details are only required when "BNM Rate (Standard)" is
     // NOT ticked — see bnmRateFieldHtml().
-    const bnmToggle = document.getElementById('asset-h-bnm-rate-toggle');
+    const bnmToggle = document.getElementById('asset-h-bnm-standard-toggle');
     if(bnmToggle && !bnmToggle.checked && !val('asset-h-bnm-rate')){
       missing.push({section:'Agreement', label:'BNM Rate (details required when not Standard)'});
-      markMissing('asset-h-bnm-rate,asset-h-bnm-rate-toggle');
+      markMissing('asset-h-bnm-rate,asset-h-bnm-standard-toggle');
     }
     // Currency lives under Pricing & Fees now (shared across the whole
     // deal, not tied to any one year/fee row), so it's validated and
@@ -8596,21 +8676,21 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(agreementType === 'Outright Purchase' || agreementType === 'Self Manage'){
       const seenYears = {};
       for(let i=1;i<=yearCount;i++){
-        if(!val('asset-y'+i+'-year')){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Year'}); markMissing('asset-y'+i+'-year'); }
+        if(!val('asset-y'+i+'-year')){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Year'}); markMissing('asset-y'+i+'-year'); }
         else{
           const y = assetYearVal(i);
           if(y !== null){
-            if(seenYears[y]){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Year (duplicate of Year '+seenYears[y]+', each vintage can only be entered once)'}); markMissing('asset-y'+i+'-year'); }
+            if(seenYears[y]){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Year (duplicate of Selection '+seenYears[y]+', each vintage can only be entered once)'}); markMissing('asset-y'+i+'-year'); }
             else{ seenYears[y] = i; }
           }
         }
         if(agreementType !== 'Self Manage'){
           const price = amountVal('asset-y'+i+'-price');
-          if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price-amt'); }
+          if(!price.amt){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Price / RECs'}); markMissing('asset-y'+i+'-price-amt'); }
         }
         if(agreementType === 'Self Manage'){
           const svc = amountVal('asset-y'+i+'-service-fee');
-          if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Year '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee-amt'); }
+          if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee-amt'); }
         }
       }
       if(agreementType === 'Self Manage'){
@@ -8654,13 +8734,13 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     }
 
     for(let i=1;i<=productCount;i++){
-      if(!val('asset-p'+i+'-owner')){ missing.push({section:'Products', label:'Product '+i+' — Device Owner Name'}); markMissing('asset-p'+i+'-owner'); }
+      if(!val('asset-p'+i+'-owner')){ missing.push({section:'Device', label:'Device '+i+' — Device Owner Name'}); markMissing('asset-p'+i+'-owner'); }
       [['scheme-type','Scheme Type'],['capacity','Capacity (MWac)'],['coordinate','Coordinate'],['asset-address','Asset Address Line'],['asset-city','Asset City, State/Province']].forEach(([sfx,label])=>{
-        if(!val('asset-p'+i+'-'+sfx)){ missing.push({section:'Products', label:'Product '+i+' — '+label}); markMissing('asset-p'+i+'-'+sfx); }
+        if(!val('asset-p'+i+'-'+sfx)){ missing.push({section:'Device', label:'Device '+i+' — '+label}); markMissing('asset-p'+i+'-'+sfx); }
       });
-      if(!val('asset-p'+i+'-rec-start')){ missing.push({section:'Products', label:'Product '+i+' — REC Issuance start date'}); markMissing('asset-p'+i+'-rec-start'); }
-      if(!val('asset-p'+i+'-rec-end')){ missing.push({section:'Products', label:'Product '+i+' — REC Issuance end date'}); markMissing('asset-p'+i+'-rec-end'); }
-      if(!val('asset-p'+i+'-cod')){ missing.push({section:'Products', label:'Product '+i+' — COD'}); markMissing('asset-p'+i+'-cod'); }
+      if(!val('asset-p'+i+'-rec-start')){ missing.push({section:'Device', label:'Device '+i+' — REC Issuance start date'}); markMissing('asset-p'+i+'-rec-start'); }
+      if(!val('asset-p'+i+'-rec-end')){ missing.push({section:'Device', label:'Device '+i+' — REC Issuance end date'}); markMissing('asset-p'+i+'-rec-end'); }
+      if(!val('asset-p'+i+'-cod')){ missing.push({section:'Device', label:'Device '+i+' — COD'}); markMissing('asset-p'+i+'-cod'); }
     }
     return missing;
   }
@@ -8705,9 +8785,15 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     rows.push(['Bank Account Number', val('asset-h-bank-account-number')]);
     rows.push(['Swift Code', val('asset-h-swift-code')]);
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
-    rows.push(['Broker (if any)', val('asset-h-broker') || 'N/A']);
+    const brokerOn = !!(document.getElementById('asset-h-broker-toggle') && document.getElementById('asset-h-broker-toggle').checked);
+    rows.push(['Broker (if any)', brokerOn ? val('asset-h-broker') : 'N/A']);
+    if(brokerOn && assetBrokerFeeType()){
+      rows.push(['Broker Fees', assetBrokerFeeType()]);
+      rows.push(['Broker Fee Currency', val('asset-h-broker-fee-currency')]);
+      rows.push([assetBrokerFeeType() === 'Fixed price' ? 'Broker Fee Fixed Price' : 'Broker Fee Price / REC', val('asset-h-broker-fee-price')]);
+    }
     // BNM Rate (Standard): Y when ticked; N plus the typed-in details when not.
-    const bnmToggleForRows = document.getElementById('asset-h-bnm-rate-toggle');
+    const bnmToggleForRows = document.getElementById('asset-h-bnm-standard-toggle');
     if(bnmToggleForRows && bnmToggleForRows.checked){
       rows.push(['BNM Rate (Standard)', 'Y']);
     } else {
@@ -8812,7 +8898,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     });
 
     html += '<table style="margin-top:14px;">';
-    html += '<tr><th colspan="'+ASSET_PRODUCT_COLS.length+'">Products</th></tr>';
+    html += '<tr><th colspan="'+ASSET_PRODUCT_COLS.length+'">Device</th></tr>';
     html += '<tr>'+ASSET_PRODUCT_COLS.map(c=>'<th>'+escapeHtml(c)+'</th>').join('')+'</tr>';
     products.forEach(r=>{
       html += '<tr>'+r.map(v=>'<td>'+escapeHtml(v)+'</td>').join('')+'</tr>';
@@ -8834,7 +8920,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       section.rows.forEach(r=> lines.push(r.join(' | ')));
     });
     lines.push('');
-    lines.push('Products');
+    lines.push('Device');
     lines.push(ASSET_PRODUCT_COLS.join(' | '));
     products.forEach(r=> lines.push(r.join(' | ')));
     return lines.join('\n');
@@ -9096,7 +9182,26 @@ function applyAssetDraftData(data){
   // Re-sync the BNM Rate textarea's shown/disabled/cleared state to match
   // the restored tick-box state (see the change listener in
   // bnmRateFieldHtml()'s setup).
-  const bnmToggleEl = document.getElementById('asset-h-bnm-rate-toggle');
+  // Drafts saved before the Registry list changed hold "IREC"/"TIGR", which
+  // aren't options any more (the select would show blank). Map them to the
+  // new "I-REC (MY)" style value using the restored Entity (MY/SG).
+  const regEl = document.getElementById('asset-h-registry');
+  const oldReg = String((data.allValues || {})['asset-h-registry'] || '').trim().toUpperCase();
+  if(regEl && !regEl.value && (oldReg === 'IREC' || oldReg === 'TIGR')){
+    const ent = (document.getElementById('asset-h-entity') || {}).value === 'SG' ? 'SG' : 'MY';
+    regEl.value = (oldReg === 'IREC' ? 'I-REC' : 'TIGR') + ' (' + ent + ')';
+  }
+  if(window.assetSyncBrokerUi){
+    // syncAssetBrokerUi clears hidden fields, so re-apply the saved broker
+    // values after showing the right parts.
+    const av = data.allValues || {};
+    window.assetSyncBrokerUi();
+    ['asset-h-broker','asset-h-broker-fee-currency','asset-h-broker-fee-price'].forEach(id=>{
+      const el = document.getElementById(id);
+      if(el && av[id] !== undefined) el.value = av[id];
+    });
+  }
+  const bnmToggleEl = document.getElementById('asset-h-bnm-standard-toggle');
   if(bnmToggleEl) bnmToggleEl.dispatchEvent(new Event('change'));
   // Re-sync Hybrid's shown/hidden Profit Sharing terms block, same reason.
   const hybridToggleEl = document.getElementById('asset-op-hybrid-toggle');
@@ -9286,8 +9391,14 @@ async function saveAssetToLog(){
     row[mc.registry] = v('asset-h-registry');
     row[mc.deviceStatus] = v('asset-h-device-status');
     row[mc.paymentTerm] = v('asset-h-payment-term');
-    row[mc.broker] = v('asset-h-broker') || 'N/A';
-    const bnmStdToggle = document.getElementById('asset-h-bnm-rate-toggle');
+    const brokerToggleForSave = document.getElementById('asset-h-broker-toggle');
+    const brokerOnForSave = !!(brokerToggleForSave && brokerToggleForSave.checked);
+    const brokerFeeTypeForSave = brokerOnForSave ? ((document.querySelector('.asset-broker-fee-type:checked')||{}).getAttribute ? document.querySelector('.asset-broker-fee-type:checked').getAttribute('data-value') : '') : '';
+    row[mc.broker] = brokerOnForSave ? v('asset-h-broker') : 'N/A';
+    row[mc.brokerFeeType] = brokerFeeTypeForSave;
+    row[mc.brokerFeeCurrency] = brokerFeeTypeForSave ? v('asset-h-broker-fee-currency') : '';
+    row[mc.brokerFeePrice] = brokerFeeTypeForSave ? v('asset-h-broker-fee-price') : '';
+    const bnmStdToggle = document.getElementById('asset-h-bnm-standard-toggle');
     row[mc.bnmRate] = (bnmStdToggle && bnmStdToggle.checked) ? 'Y' : v('asset-h-bnm-rate');
     row[mc.currency] = v('asset-h-currency');
     row[mc.specialRemarks] = v('asset-h-remarks') || 'N/A';
@@ -9447,8 +9558,11 @@ async function addAssetApprovalToList(agreementType, values){
     'Registry': values[mc.registry],
     'Device Status': values[mc.deviceStatus],
     'Payment Term': values[mc.paymentTerm],
-    'Broker': values[mc.broker],
     'BNM Rate': values[mc.bnmRate],
+    'Broker': values[mc.broker],
+    'Broker Fee Type': values[mc.brokerFeeType],
+    'Broker Fee Currency': values[mc.brokerFeeCurrency],
+    'Broker Fee Price': values[mc.brokerFeePrice],
     'Currency': values[mc.currency],
     'Special Remarks': values[mc.specialRemarks],
     'Registration Number': values[mc.regNumber],
@@ -9624,8 +9738,8 @@ async function approveAssetDeal(assetId){
           await updateTableRow(tableName, r.index, values);
         }
       }catch(err){
-        console.error('Could not copy Product ' + productNum + ' into the "Asset Approval Record List" list', err);
-        approvedListErrors.push('Product ' + productNum + ': ' + err.message);
+        console.error('Could not copy Device ' + productNum + ' into the "Asset Approval Record List" list', err);
+        approvedListErrors.push('Device ' + productNum + ': ' + err.message);
       }
     }
   }
