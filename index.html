@@ -9229,7 +9229,19 @@ function assignPendingAssetId(){
   currentAssetDocId = placeholder;
   return placeholder;
 }
-async function assignFormalAssetId(placeholderId, productCount){
+// Asset ID format: "A" + type code + 5-digit running number + "-" + 3-digit
+// device count, e.g. AOP00420-001 (Outright Purchase), ASM00421-003 (Self
+// Manage), APS00422-002 (Profit Sharing). The running number is ONE shared
+// sequence across all 3 types (never reused), starting at 00420.
+const ASSET_ID_TYPE_CODE = { 'Outright Purchase':'OP', 'Self Manage':'SM', 'Profit Sharing':'PS' };
+const ASSET_ID_FIRST_NUMBER = 420;
+// Pulls the 5-digit running number out of an Asset ID in either the new
+// format (AOP00420-001) or the older plain one (00012-3). null if none.
+function assetIdRunningNumber(raw){
+  const m = /^(?:A(?:OP|SM|PS))?(\d{5})-/i.exec(String(raw || '').trim());
+  return m ? m[1] : null;
+}
+async function assignFormalAssetId(placeholderId, productCount, agreementType){
   // Asset ID must stay globally unique across all 3 split tables, so every
   // scan pulls all three and merges them before computing the next number.
   const scan = async () => {
@@ -9243,23 +9255,25 @@ async function assignFormalAssetId(placeholderId, productCount){
     const takenNums = new Set();
     allRows.forEach(raw=>{
       if(isPendingAssetId(raw)) return;
-      const n = parseInt(raw.slice(0,5), 10);
-      if(!isNaN(n)){
-        if(n > maxNum) maxNum = n;
-        takenNums.add(raw.slice(0,5));
-      }
+      const num = assetIdRunningNumber(raw);
+      if(num === null) return;
+      const n = parseInt(num, 10);
+      if(n > maxNum) maxNum = n;
+      takenNums.add(num);
     });
     return { maxNum, takenNums };
   };
   const first = await scan();
-  let candidate = Math.max(first.maxNum + 1, assetIdStartOverride || 1);
+  let candidate = Math.max(first.maxNum + 1, assetIdStartOverride || 0, ASSET_ID_FIRST_NUMBER);
   const { takenNums } = await scan();
   let padded = String(candidate).padStart(5,'0');
   while(takenNums.has(padded)){
     candidate += 1;
     padded = String(candidate).padStart(5,'0');
   }
-  return padded + '-' + (parseInt(productCount,10) || '');
+  const typeCode = ASSET_ID_TYPE_CODE[agreementType] || '';
+  const devices = String(parseInt(productCount,10) || 1).padStart(3,'0');
+  return 'A' + typeCode + padded + '-' + devices;
 }
 
 /* ---- Per-user draft (autosaves the in-progress Asset form into
@@ -9866,7 +9880,7 @@ async function approveAssetDeal(assetId){
   else return;
   let assignedAssetId = null;
   if(currentStatus === STATUS_PENDING_1){
-    assignedAssetId = await assignFormalAssetId(assetId, matching.length);
+    assignedAssetId = await assignFormalAssetId(assetId, matching.length, type);
   }
   const recheck = await findAssetRowGroupLive(assetId);
   const recheckStatus = recheck ? recheck.rows[0].values[0][mc.status] : undefined;
