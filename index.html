@@ -1147,14 +1147,15 @@ const ASSET_ONETIME_FEE_KEYS = ['deviceRegFeeAmt','recsIssuanceFeeAmt','redempti
 // and the old invoicingAddress / invoicingSameAsAddress / acctDeptEmail /
 // acctDeptEmailSameAsEmail columns are kept in place (so no existing column
 // shifts) but are no longer filled in — the form no longer asks for them.
-//   agreementCompanyName, companyDeviceOwnerName (Company section's "Device
-//   Owner Name" — separate from the per-product deviceOwnerName column),
+//   agreementCompanyName (the old companyDeviceOwnerName column that sat
+//   right after it has been removed from all 3 tables — device owner is
+//   recorded per device in deviceOwnerName instead),
 //   swiftCode, financeEmail, residential ('Y'/'N'), deviceCountry, fuel,
 //   minCommitmentVolume.
 // BNM Rate keeps using the existing bnmRate column: 'Y' when "BNM Rate
 // (Standard)" is ticked, otherwise the BD's typed-in details.
 const ASSET_DETAILS_EXTRA_KEYS_V2 = [
-  'agreementCompanyName','companyDeviceOwnerName','swiftCode','financeEmail',
+  'agreementCompanyName','swiftCode','financeEmail',
   'residential','deviceCountry','fuel','minCommitmentVolume'
 ];
 // Third batch — per-PRODUCT asset details (one value per product row),
@@ -9561,7 +9562,6 @@ async function saveAssetToLog(){
     row[mc.bankName] = v('asset-h-bank-name');
     row[mc.bankAccountNumber] = v('asset-h-bank-account-number');
     row[mc.agreementCompanyName] = v('asset-h-agreement-company-name');
-    row[mc.companyDeviceOwnerName] = ''; // no longer on the form — recorded per device instead
     row[mc.swiftCode] = v('asset-h-swift-code');
     row[mc.financeEmail] = v('asset-h-finance-email');
     row[mc.residential] = v('asset-h-residential') === 'Y' ? 'Y' : 'N';
@@ -9726,7 +9726,6 @@ async function addAssetApprovalToList(agreementType, values){
     'Bank Name': values[mc.bankName],
     'Bank Account Number': values[mc.bankAccountNumber],
     'Agreement Company Name': values[mc.agreementCompanyName],
-    'Company Device Owner Name': values[mc.companyDeviceOwnerName],
     'Swift Code': values[mc.swiftCode],
     'Email': values[mc.email],
     'Finance Email': values[mc.financeEmail],
