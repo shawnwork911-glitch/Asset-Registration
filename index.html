@@ -637,6 +637,15 @@
   <div id="tab-panel-asset" class="tab-panel" style="display:none;">
 
   <div class="card">
+    <div class="card-title-row">
+      <p class="card-title">Company</p>
+      <button type="button" class="section-lock" data-section="asset-company" title="Lock this whole section">🔓 Lock section</button>
+    </div>
+    <p id="asset-company-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Company at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of devices. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
+    <div id="asset-company-fields" class="grid"></div>
+  </div>
+
+  <div class="card">
     <p class="card-title">Agreement Type</p>
     <p style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Choose the agreement type — this changes what the Pricing &amp; Fees section below asks for.</p>
     <div class="segmented" id="asset-agreement-type-segmented">
@@ -653,15 +662,6 @@
     </div>
     <p id="asset-agreement-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Agreement at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of devices. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
     <div id="asset-agreement-fields" class="grid"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title-row">
-      <p class="card-title">Company</p>
-      <button type="button" class="section-lock" data-section="asset-company" title="Lock this whole section">🔓 Lock section</button>
-    </div>
-    <p id="asset-company-lock-note" style="font-size:12px;color:var(--text-secondary);margin:0 0 14px;">Click the 🔓 next to any field to lock just that field, or use "Lock section" above to lock every field in Company at once. Locked fields stay filled in and protected the next time you open this file, even when you change the number of devices. While a section is locked, its individual field locks are held in place — unlock the section to edit again.</p>
-    <div id="asset-company-fields" class="grid"></div>
   </div>
 
   <div class="card" id="asset-pricing-card">
@@ -1205,7 +1205,10 @@ const ASSET_OP_EXTRA_KEYS = ['hybrid','profitRatioOwner','profitRatioSaxon']
   // terms (model, threshold/fixed price/surplus share, or volume split +
   // revenue share, which selections are Hybrid vs Outright, one-time fees).
   // Appended as the very last column of the Outright Purchase table.
-  .concat(['hybridDescription']);
+  .concat(['hybridDescription'])
+  // Special Charge Remarks (Hybrid terms' Extra Charges Incurred) — appended
+  // after Hybrid Description as the new last column.
+  .concat(['specialChargeRemarks']);
 const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'), ASSET_OP_EXTRA_KEYS);
 const ASSET_MC_SM = buildAssetColMap(
   assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS),
@@ -1213,7 +1216,8 @@ const ASSET_MC_SM = buildAssetColMap(
 );
 const ASSET_MC_PS = buildAssetColMap(
   ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS),
-  ASSET_DETAILS_EXTRA_KEYS
+  // Special Charge Remarks (Extra Charges Incurred) — new last column.
+  ASSET_DETAILS_EXTRA_KEYS.concat(['specialChargeRemarks'])
 );
 const ASSET_TABLE_BY_TYPE = {
   'Outright Purchase': 'AssetTradeDealLog_OutrightPurchase',
@@ -8232,6 +8236,26 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       '<input type="text" inputmode="decimal" class="numeric-decimal-only" id="'+amtId+'" placeholder="0.00" disabled style="width:100%;margin-top:6px;display:none;"/>'+
     '</div>';
   }
+  // Extra Charges Incurred (Outright Purchase Hybrid terms and Profit
+  // Sharing): tick box only, no amount field. Ticked -> the fee's Excel
+  // column is filled with "Y"; unticked -> left blank. Same '-toggle' id
+  // convention as feeFieldHtml() so draft save/restore keeps working.
+  function feeTickHtml(label, baseId){
+    const toggleId = baseId+'-toggle';
+    return '<div id="'+toggleId+'-wrap">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'+
+        '<label style="display:flex;align-items:center;gap:6px;margin:0;cursor:pointer;">'+
+          '<input type="checkbox" id="'+toggleId+'" class="asset-fee-tick" style="width:auto;margin:0;"/>'+label+
+        '</label>'+
+        '<button type="button" class="field-lock" data-field="'+toggleId+'" title="Lock this field">🔓</button>'+
+      '</div>'+
+    '</div>';
+  }
+  function specialChargeRemarksHtml(id){
+    return '<div style="margin-top:12px;">'+
+      lockableField('Special Charge Remarks (If required)', '<textarea id="'+id+'" placeholder="N/A" rows="2"></textarea>', id)+
+    '</div>';
+  }
   document.addEventListener('change', (e)=>{
     if(e.target && e.target.matches && e.target.matches('.asset-fee-toggle')){
       const amtInput = document.getElementById(e.target.getAttribute('data-amt-id'));
@@ -8260,8 +8284,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
 
   function buildHeaderFields(){
     document.getElementById('asset-company-fields').innerHTML =
+      lockableField('BD in-charge', selectInput('asset-h-bd', BD_NAMES, BD_NAMES[0]), 'asset-h-bd') +
+      lockableField('Entity', selectInput('asset-h-entity', ['MY','SG'], 'MY'), 'asset-h-entity') +
       lockableField('Agreement Company Name', textInput('asset-h-agreement-company-name','Company name as per agreement'), 'asset-h-agreement-company-name') +
-      lockableField('Device Owner Name', textInput('asset-h-company-device-owner','Device owner name'), 'asset-h-company-device-owner') +
       lockableField('Registration Number', textInput('asset-h-reg-number','Company registration number'), 'asset-h-reg-number') +
       lockableField('Contact Person', textInput('asset-h-contact-person','Contact person name'), 'asset-h-contact-person') +
       lockableField('Phone Number', textInput('asset-h-phone','e.g. +60 12-345 6789'), 'asset-h-phone') +
@@ -8277,9 +8302,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     document.getElementById('asset-agreement-fields').innerHTML =
       lockableField('Agreement Start Date', dateInput('asset-h-agreement-start'), 'asset-h-agreement-start') +
       lockableField('Agreement End Date', dateInput('asset-h-agreement-end'), 'asset-h-agreement-end') +
-      lockableField('Entity', selectInput('asset-h-entity', ['MY','SG'], 'MY'), 'asset-h-entity') +
-      lockableField('BD in-charge', selectInput('asset-h-bd', BD_NAMES, BD_NAMES[0]), 'asset-h-bd') +
-      lockableField('Device Owner', textInput('asset-h-supplier','Device owner name'), 'asset-h-supplier') +
       lockableField('Registry', selectInput('asset-h-registry', ASSET_REGISTRY_OPTIONS, ASSET_REGISTRY_OPTIONS[0]), 'asset-h-registry') +
       lockableField('Device Country', selectInput('asset-h-device-country', ASSET_DEVICE_COUNTRY_OPTIONS, ASSET_DEVICE_COUNTRY_OPTIONS[0]), 'asset-h-device-country') +
       lockableField('Fuel', selectInput('asset-h-fuel', ASSET_FUEL_OPTIONS, ASSET_FUEL_OPTIONS[0]), 'asset-h-fuel') +
@@ -8362,12 +8384,13 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
             lockableField('Revenue share — Saxon (%)', '<input type="text" id="asset-op-hybrid-ratio-saxon" placeholder="Auto-filled" readonly/>', 'asset-op-hybrid-ratio-saxon')+
             '<p style="grid-column:1 / -1;font-size:12px;color:var(--text-secondary);margin:0;">The outright part is priced at each Hybrid selection\'s Price / RECs below.</p>'+
           '</div>'+
-          '<p class="trade-title" style="margin-top:16px;">One-time fees</p>'+
+          '<p class="trade-title" style="margin-top:16px;">Extra Charges Incurred</p>'+
           '<div class="grid">'+
-            feeFieldHtml('Device registration fee', 'asset-op-hybrid-device-reg-fee')+
-            feeFieldHtml('RECs issuance fee', 'asset-op-hybrid-recs-issuance-fee')+
-            feeFieldHtml('Redemption fee', 'asset-op-hybrid-redemption-fee')+
+            feeTickHtml('Device registration fee', 'asset-op-hybrid-device-reg-fee')+
+            feeTickHtml('RECs issuance fee', 'asset-op-hybrid-recs-issuance-fee')+
+            feeTickHtml('Redemption fee', 'asset-op-hybrid-redemption-fee')+
           '</div>'+
+          specialChargeRemarksHtml('asset-op-hybrid-special-charge-remarks')+
           '<p style="font-size:12px;color:var(--text-secondary);margin:12px 0 0;">Mark each Year Selection below as Hybrid or Outright.</p>'+
         '</div>'+
         '<div class="trade-count-row">'+
@@ -8413,10 +8436,14 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         '<div class="grid">'+
           lockableField('Profit Ratio — Device Owner (%)', '<input type="text" inputmode="decimal" class="profit-ratio-owner-input" data-saxon-id="asset-ps-ratio-saxon" id="asset-ps-ratio-owner" placeholder="e.g. 70"/>', 'asset-ps-ratio-owner')+
           lockableField('Profit Ratio — Saxon (%)', '<input type="text" id="asset-ps-ratio-saxon" placeholder="Auto-filled" readonly/>', 'asset-ps-ratio-saxon')+
-          feeFieldHtml('Device registration fee', 'asset-ps-device-reg-fee')+
-          feeFieldHtml('RECs issuance fee', 'asset-ps-recs-issuance-fee')+
-          feeFieldHtml('Redemption fee', 'asset-ps-redemption-fee')+
-        '</div>';
+        '</div>'+
+        '<p class="trade-title" style="margin-top:16px;">Extra Charges Incurred</p>'+
+        '<div class="grid">'+
+          feeTickHtml('Device registration fee', 'asset-ps-device-reg-fee')+
+          feeTickHtml('RECs issuance fee', 'asset-ps-recs-issuance-fee')+
+          feeTickHtml('Redemption fee', 'asset-ps-redemption-fee')+
+        '</div>'+
+        specialChargeRemarksHtml('asset-ps-special-charge-remarks');
     }
     // Restore any per-field locks saved earlier, then re-apply a locked
     // Pricing & Fees section — same pattern the Details/Products sections
@@ -8489,10 +8516,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     if(outrightSel.length) parts.push('Outright Purchase selections: '+outrightSel.join('; ')+'.');
     const fees = [];
     [['asset-op-hybrid-device-reg-fee','Device registration fee'],['asset-op-hybrid-recs-issuance-fee','RECs issuance fee'],['asset-op-hybrid-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-      const amt = feeAmtForRow(id);
-      if(amt) fees.push(label+' '+fmtMoney(amt));
+      if(feeTickForRow(id)) fees.push(label);
     });
-    if(fees.length) parts.push('One-time fees: '+fees.join('; ')+'.');
+    if(fees.length) parts.push('Extra charges incurred: '+fees.join('; ')+'.');
+    const scr = val('asset-op-hybrid-special-charge-remarks');
+    if(scr) parts.push('Special charge remarks: '+scr);
     return parts.join(' ');
   }
   window.assetGetHybridDescription = buildHybridDescription;
@@ -8722,9 +8750,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const agreementFields = [
       ['asset-h-agreement-start','Agreement Start Date'],
       ['asset-h-agreement-end','Agreement End Date'],
-      ['asset-h-entity','Entity'],
-      ['asset-h-bd','BD in-charge'],
-      ['asset-h-supplier','Device Owner'],
       ['asset-h-registry','Registry'],
       ['asset-h-device-country','Device Country'],
       ['asset-h-fuel','Fuel'],
@@ -8736,8 +8761,9 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       if(!val(id)){ missing.push({section:'Agreement', label}); markMissing(id); }
     });
     const companyFields = [
+      ['asset-h-bd','BD in-charge'],
+      ['asset-h-entity','Entity'],
       ['asset-h-agreement-company-name','Agreement Company Name'],
-      ['asset-h-company-device-owner','Device Owner Name'],
       ['asset-h-reg-number','Registration Number'],
       ['asset-h-contact-person','Contact Person'],
       ['asset-h-phone','Phone Number'],
@@ -8827,12 +8853,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           let anyHybridSel = false;
           for(let k=1;k<=yearCount;k++){ if(selStructure(k) === 'Hybrid') anyHybridSel = true; }
           if(!anyHybridSel){ missing.push({section:'Pricing & Fees', label:'Hybrid — mark at least one Year Selection as Hybrid'}); for(let k=1;k<=yearCount;k++) markMissing('asset-y'+k+'-structure'); }
-          [['asset-op-hybrid-device-reg-fee','Hybrid — Device registration fee'],['asset-op-hybrid-recs-issuance-fee','Hybrid — RECs issuance fee'],['asset-op-hybrid-redemption-fee','Hybrid — Redemption fee']].forEach(([id,label])=>{
-            const toggle = document.getElementById(id+'-toggle');
-            if(toggle && toggle.checked && !amountVal(id).amt){
-              missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt');
-            }
-          });
+          // Extra Charges Incurred are tick-only (no amount) — nothing to validate.
         }
       }
     } else {
@@ -8840,13 +8861,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       // (see the input listener next to feeFieldHtml), so only Device
       // Owner needs to be validated here.
       if(!val('asset-ps-ratio-owner')){ missing.push({section:'Pricing & Fees', label:'Profit Ratio — Device Owner (%)'}); markMissing('asset-ps-ratio-owner'); }
-      // One-time fees — not compulsory, same as Self Manage above.
-      [['asset-ps-device-reg-fee','Device registration fee'],['asset-ps-recs-issuance-fee','RECs issuance fee'],['asset-ps-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-        const toggle = document.getElementById(id+'-toggle');
-        if(toggle && toggle.checked && !amountVal(id).amt){
-          missing.push({section:'Pricing & Fees', label}); markMissing(id+'-amt');
-        }
-      });
+      // Extra Charges Incurred are tick-only (no amount) — nothing to validate.
     }
 
     for(let i=1;i<=productCount;i++){
@@ -8873,11 +8888,20 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
 
   function buildDetailRows(){
     const rows = [];
+    rows.push(['BD in-charge', val('asset-h-bd')]);
+    rows.push(['Entity', val('asset-h-entity')]);
+    rows.push(['Agreement Company Name', val('asset-h-agreement-company-name')]);
+    rows.push(['Registration Number', val('asset-h-reg-number')]);
+    rows.push(['Invoice Address', val('asset-h-address')]);
+    rows.push(['Contact Person', val('asset-h-contact-person')]);
+    rows.push(['Phone Number', val('asset-h-phone')]);
+    rows.push(['Email', val('asset-h-email')]);
+    rows.push(['Finance Email', val('asset-h-finance-email')]);
+    rows.push(['Bank Name', val('asset-h-bank-name')]);
+    rows.push(['Bank Account Number', val('asset-h-bank-account-number')]);
+    rows.push(['Swift Code', val('asset-h-swift-code')]);
     rows.push(['Agreement Start Date', formatDisplayDate(val('asset-h-agreement-start'))]);
     rows.push(['Agreement End Date', formatDisplayDate(val('asset-h-agreement-end'))]);
-    rows.push(['Entity', val('asset-h-entity')]);
-    rows.push(['BD in-charge', val('asset-h-bd')]);
-    rows.push(['Device Owner', val('asset-h-supplier')]);
     rows.push(['Registry', registryDisplayName(val('asset-h-registry'))]);
     rows.push(['Device Country', val('asset-h-device-country')]);
     rows.push(['Fuel', val('asset-h-fuel')]);
@@ -8888,17 +8912,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const isHybridForType = !!(agreementType === 'Outright Purchase' && hybridToggleForType && hybridToggleForType.checked);
     rows.push(['Agreement Type', agreementType + (isHybridForType ? ' (Hybrid — Profit Sharing)' : '')]);
     rows.push(['Payment Term', val('asset-h-payment-term')]);
-    rows.push(['Agreement Company Name', val('asset-h-agreement-company-name')]);
-    rows.push(['Device Owner Name', val('asset-h-company-device-owner')]);
-    rows.push(['Registration Number', val('asset-h-reg-number')]);
-    rows.push(['Invoice Address', val('asset-h-address')]);
-    rows.push(['Contact Person', val('asset-h-contact-person')]);
-    rows.push(['Phone Number', val('asset-h-phone')]);
-    rows.push(['Email', val('asset-h-email')]);
-    rows.push(['Finance Email', val('asset-h-finance-email')]);
-    rows.push(['Bank Name', val('asset-h-bank-name')]);
-    rows.push(['Bank Account Number', val('asset-h-bank-account-number')]);
-    rows.push(['Swift Code', val('asset-h-swift-code')]);
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     const brokerOn = !!(document.getElementById('asset-h-broker-toggle') && document.getElementById('asset-h-broker-toggle').checked);
     rows.push(['Broker (if any)', brokerOn ? val('asset-h-broker') : 'N/A']);
@@ -8923,6 +8936,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   function feeAmtForRow(id){
     const toggle = document.getElementById(id+'-toggle');
     return (toggle && toggle.checked) ? amountVal(id).text : '';
+  }
+  // Tick-only Extra Charges Incurred: "Y" when ticked, blank otherwise.
+  function feeTickForRow(id){
+    const toggle = document.getElementById(id+'-toggle');
+    return (toggle && toggle.checked) ? 'Y' : '';
   }
   function buildPricingSectionData(){
     const out = [];
@@ -8954,11 +8972,14 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
         ]);
       }
     } else {
-      out.push({heading:'Profit Sharing', cols:['Profit Ratio (Device Owner : Saxon)','Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
-        val('asset-ps-ratio-owner')+'% : '+val('asset-ps-ratio-saxon')+'%',
-        feeAmtForRow('asset-ps-device-reg-fee'),
-        feeAmtForRow('asset-ps-recs-issuance-fee'),
-        feeAmtForRow('asset-ps-redemption-fee')
+      out.push({heading:'Profit Sharing', cols:['Profit Ratio (Device Owner : Saxon)'], rows:[[
+        val('asset-ps-ratio-owner')+'% : '+val('asset-ps-ratio-saxon')+'%'
+      ]]});
+      out.push({heading:'Extra Charges Incurred', cols:['Device registration fee','RECs issuance fee','Redemption fee','Special Charge Remarks'], rows:[[
+        feeTickForRow('asset-ps-device-reg-fee'),
+        feeTickForRow('asset-ps-recs-issuance-fee'),
+        feeTickForRow('asset-ps-redemption-fee'),
+        val('asset-ps-special-charge-remarks') || 'N/A'
       ]]});
     }
     // Currency is one shared field for the whole deal, not tied to any
@@ -9495,6 +9516,12 @@ async function saveAssetToLog(){
     const amt = v(domId+'-amt');
     row[mc[amtKey]] = amt ? Number(amt) : '';
   };
+  // Extra Charges Incurred tick boxes -> "Y" / blank in the fee column.
+  const writeTick = (row, mcKey, domId) => {
+    if(!(mcKey in mc)) return;
+    const t = document.getElementById(domId+'-toggle');
+    row[mc[mcKey]] = (t && t.checked) ? 'Y' : '';
+  };
   const rowsToWrite = [];
   for(let i = 1; i <= productCount; i++){
     const row = new Array(colCount).fill('');
@@ -9503,7 +9530,13 @@ async function saveAssetToLog(){
     row[mc.entity] = v('asset-h-entity');
     row[mc.agreementStart] = v('asset-h-agreement-start');
     row[mc.agreementEnd] = v('asset-h-agreement-end');
-    row[mc.supplier] = v('asset-h-supplier');
+    // Device Owner is no longer asked in the Agreement section (it's
+    // recorded per device) — Supplier now carries the device owner name(s).
+    {
+      const owners = [];
+      for(let k = 1; k <= productCount; k++){ const o = v('asset-p'+k+'-owner'); if(o && owners.indexOf(o) === -1) owners.push(o); }
+      row[mc.supplier] = owners.join('; ');
+    }
     row[mc.registry] = v('asset-h-registry');
     row[mc.deviceStatus] = v('asset-h-device-status');
     row[mc.paymentTerm] = v('asset-h-payment-term');
@@ -9528,7 +9561,7 @@ async function saveAssetToLog(){
     row[mc.bankName] = v('asset-h-bank-name');
     row[mc.bankAccountNumber] = v('asset-h-bank-account-number');
     row[mc.agreementCompanyName] = v('asset-h-agreement-company-name');
-    row[mc.companyDeviceOwnerName] = v('asset-h-company-device-owner');
+    row[mc.companyDeviceOwnerName] = ''; // no longer on the form — recorded per device instead
     row[mc.swiftCode] = v('asset-h-swift-code');
     row[mc.financeEmail] = v('asset-h-finance-email');
     row[mc.residential] = v('asset-h-residential') === 'Y' ? 'Y' : 'N';
@@ -9560,9 +9593,10 @@ async function saveAssetToLog(){
         const isVolumeSplit = window.assetHybridModel && window.assetHybridModel() === 'Volume split';
         row[mc.profitRatioOwner] = isVolumeSplit ? v('asset-op-hybrid-ratio-owner') : '';
         row[mc.profitRatioSaxon] = isVolumeSplit ? v('asset-op-hybrid-ratio-saxon') : '';
-        writeAmount(row, 'deviceRegFee', 'asset-op-hybrid-device-reg-fee');
-        writeAmount(row, 'recsIssuanceFee', 'asset-op-hybrid-recs-issuance-fee');
-        writeAmount(row, 'redemptionFee', 'asset-op-hybrid-redemption-fee');
+        writeTick(row, 'deviceRegFeeAmt', 'asset-op-hybrid-device-reg-fee');
+        writeTick(row, 'recsIssuanceFeeAmt', 'asset-op-hybrid-recs-issuance-fee');
+        writeTick(row, 'redemptionFeeAmt', 'asset-op-hybrid-redemption-fee');
+        row[mc.specialChargeRemarks] = v('asset-op-hybrid-special-charge-remarks');
       }
     } else if(agreementType === 'Self Manage'){
       for(let y = 1; y <= yearCount; y++){
@@ -9577,9 +9611,10 @@ async function saveAssetToLog(){
     } else { // Profit Sharing
       row[mc.profitRatioSaxon] = v('asset-ps-ratio-saxon');
       row[mc.profitRatioOwner] = v('asset-ps-ratio-owner');
-      writeAmount(row, 'deviceRegFee', 'asset-ps-device-reg-fee');
-      writeAmount(row, 'recsIssuanceFee', 'asset-ps-recs-issuance-fee');
-      writeAmount(row, 'redemptionFee', 'asset-ps-redemption-fee');
+      writeTick(row, 'deviceRegFeeAmt', 'asset-ps-device-reg-fee');
+      writeTick(row, 'recsIssuanceFeeAmt', 'asset-ps-recs-issuance-fee');
+      writeTick(row, 'redemptionFeeAmt', 'asset-ps-redemption-fee');
+      row[mc.specialChargeRemarks] = v('asset-ps-special-charge-remarks');
     }
 
     row[mc.pricingSummary] = window.assetGetPreview ? window.assetGetPreview().plain : '';
@@ -9754,6 +9789,7 @@ async function addAssetApprovalToList(agreementType, values){
   desiredByDisplayName['Device Registration Fee Amount'] = hasOneTimeFees ? values[mc.deviceRegFeeAmt] : '';
   desiredByDisplayName['RECs Issuance Fee Amount'] = hasOneTimeFees ? values[mc.recsIssuanceFeeAmt] : '';
   desiredByDisplayName['Redemption Fee Amount'] = hasOneTimeFees ? values[mc.redemptionFeeAmt] : '';
+  desiredByDisplayName['Special Charge Remarks'] = ('specialChargeRemarks' in mc) ? (values[mc.specialChargeRemarks] || '') : '';
   const fields = {};
   const skipped = [];       // no column on the list matches this display name at all
   const typeSkipped = [];   // column exists but its type/value can't be sent as-is
