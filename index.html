@@ -1211,9 +1211,16 @@ const ASSET_OP_EXTRA_KEYS = ['hybrid','profitRatioOwner','profitRatioSaxon']
   // after Hybrid Description as the new last column.
   .concat(['specialChargeRemarks']);
 const ASSET_MC_OP = buildAssetColMap(assetYearFeeKeys('price'), ASSET_OP_EXTRA_KEYS);
+// Self Manage's newer columns, appended at the very end of the table (same
+// append-only rule): Service Type + Frequency of Service (Agreement
+// section), a flat Service Fee/RECs Amount (the "Service fee / RECs" tick
+// box — the per-selection-year service fees keep using the existing
+// service<Year>Amt / service<Year>H1Amt / H2Amt columns), and Special
+// Charge Remarks.
+const ASSET_SM_EXTRA_KEYS_V5 = ['serviceType','serviceFrequency','serviceFeeAmt','specialChargeRemarks'];
 const ASSET_MC_SM = buildAssetColMap(
   assetYearFeeKeys('service').concat(ASSET_ONETIME_FEE_KEYS),
-  assetHalfYearFeeKeys('service').concat(ASSET_DETAILS_EXTRA_KEYS)
+  assetHalfYearFeeKeys('service').concat(ASSET_DETAILS_EXTRA_KEYS, ASSET_SM_EXTRA_KEYS_V5)
 );
 const ASSET_MC_PS = buildAssetColMap(
   ['profitRatioSaxon','profitRatioOwner'].concat(ASSET_ONETIME_FEE_KEYS),
@@ -8282,6 +8289,15 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   const ASSET_REGISTRY_OPTIONS = ["I-REC (MY)","I-REC (SG)","TIGR (MY)","TIGR (SG)"];
   const ASSET_DEVICE_COUNTRY_OPTIONS = ["MY","SG","VN","ID"];
   const ASSET_FUEL_OPTIONS = ["SLR","SHY","LHY","BGS"];
+  // Self Manage only (hidden for the other agreement types — see
+  // syncSelfManageAgreementUi).
+  const ASSET_SM_SERVICE_TYPE_OPTIONS = ["Issuances","Self-Redemption","RECs Exchange","Redemption"];
+  const ASSET_SM_FREQUENCY_OPTIONS = ["Monthly","Quarterly","Biyearly","Yearly"];
+  function syncSelfManageAgreementUi(){
+    document.querySelectorAll('#asset-agreement-fields .asset-sm-only').forEach(el=>{
+      el.style.display = (agreementType === 'Self Manage') ? '' : 'none';
+    });
+  }
 
   function buildHeaderFields(){
     document.getElementById('asset-company-fields').innerHTML =
@@ -8310,6 +8326,8 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       residentialFieldHtml() +
       lockableField('Min Commitment Volume', textInput('asset-h-min-commitment-volume','e.g. 1,000 RECs'), 'asset-h-min-commitment-volume') +
       lockableField('Payment Term', textInput('asset-h-payment-term','e.g. 60 Days'), 'asset-h-payment-term') +
+      '<div class="asset-sm-only">'+lockableField('Service Type', selectInput('asset-h-service-type', ASSET_SM_SERVICE_TYPE_OPTIONS, ASSET_SM_SERVICE_TYPE_OPTIONS[0]), 'asset-h-service-type')+'</div>' +
+      '<div class="asset-sm-only">'+lockableField('Frequency of Service', selectInput('asset-h-service-frequency', ASSET_SM_FREQUENCY_OPTIONS, ASSET_SM_FREQUENCY_OPTIONS[0]), 'asset-h-service-frequency')+'</div>' +
       brokerFieldHtml() +
       bnmRateFieldHtml() +
       '<div style="grid-column:1 / -1;">'+
@@ -8333,6 +8351,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     document.querySelectorAll('#asset-agreement-type-segmented .seg-btn').forEach(btn=>{
       btn.classList.toggle('active', btn.getAttribute('data-type') === agreementType);
     });
+    syncSelfManageAgreementUi();
   }
 
   function renderPricingSection(){
@@ -8412,20 +8431,30 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       // each is a tick box that only reveals its amount field once ticked
       // (see feeFieldHtml) — same pattern as the "BNM Rate" field above.
       titleEl.textContent = 'Pricing & Fees — ' + agreementType;
+      // "Service fee / RECs" is a flat amount (tick box + amount, same as
+      // the fees before it). "Service fee / RECs (per selection year)" is
+      // tick-only: ticking it reveals the Year Selections block below,
+      // where each selection carries its own Service fee / RECs.
       body.innerHTML =
         currencyHtml+
         '<div class="grid">'+
-          feeFieldHtml('Device registration fee (one-time)', 'asset-sm-device-reg-fee')+
-          feeFieldHtml('RECs issuance fee (one-time)', 'asset-sm-recs-issuance-fee')+
-          feeFieldHtml('Redemption fee (one-time)', 'asset-sm-redemption-fee')+
+          feeFieldHtml('Device registration fee', 'asset-sm-device-reg-fee')+
+          feeFieldHtml('RECs issuance fee', 'asset-sm-recs-issuance-fee')+
+          feeFieldHtml('Redemption fee', 'asset-sm-redemption-fee')+
+          feeFieldHtml('Service fee / RECs', 'asset-sm-service-fee')+
+          feeTickHtml('Service fee / RECs (per selection year)', 'asset-sm-service-fee-yearly')+
         '</div>'+
-        '<div class="trade-count-row" style="margin-top:16px;">'+
-          '<label style="margin:0;">Year Selections</label>'+
-          '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
-        '</div>'+
-        '<div id="asset-year-rows" style="margin-top:16px;"></div>';
+        specialChargeRemarksHtml('asset-sm-special-charge-remarks')+
+        '<div id="asset-sm-year-section" style="display:none;">'+
+          '<div class="trade-count-row" style="margin-top:16px;">'+
+            '<label style="margin:0;">Year Selections</label>'+
+            '<input type="number" id="asset-year-count" min="1" max="20" step="1" value="'+yearCount+'" inputmode="numeric"/>'+
+          '</div>'+
+          '<div id="asset-year-rows" style="margin-top:16px;"></div>'+
+        '</div>';
       document.getElementById('asset-year-count').addEventListener('input', onYearCountChange);
       renderYearRows();
+      syncSmYearUi();
     } else {
       // Profit Ratio only takes a Device Owner (%) input — Saxon's share is
       // derived automatically (100 - Device Owner) via the input listener
@@ -8453,6 +8482,20 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     initLocksIn(body);
     initSectionLock('asset-pricing');
   }
+  // ---- Self Manage per-selection-year service fee ----
+  function isSmPerYearOn(){
+    const t = document.getElementById('asset-sm-service-fee-yearly-toggle');
+    return !!(agreementType === 'Self Manage' && t && t.checked);
+  }
+  function syncSmYearUi(){
+    const sec = document.getElementById('asset-sm-year-section');
+    if(sec) sec.style.display = isSmPerYearOn() ? 'block' : 'none';
+  }
+  document.addEventListener('change', (e)=>{
+    if(e.target && e.target.id === 'asset-sm-service-fee-yearly-toggle') syncSmYearUi();
+  });
+  window.assetSyncSmYearUi = syncSmYearUi;
+  window.assetIsSmPerYearOn = isSmPerYearOn;
   // ---- Hybrid (Outright Purchase) helpers ----
   function isHybridOn(){
     const t = document.getElementById('asset-op-hybrid-toggle');
@@ -8804,7 +8847,21 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
       markMissing('asset-h-currency');
     }
 
-    if(agreementType === 'Outright Purchase' || agreementType === 'Self Manage'){
+    if(agreementType === 'Self Manage'){
+      // None of these is compulsory: each is only required once its own
+      // tick box is checked (see feeFieldHtml).
+      [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee'],['asset-sm-service-fee','Service fee / RECs']].forEach(([id,label])=>{
+        const toggle = document.getElementById(id+'-toggle');
+        if(toggle && toggle.checked && !amountVal(id).amt){
+          missing.push({section:'Pricing & Fees', label:label}); markMissing(id+'-amt');
+        }
+      });
+      if(!val('asset-h-service-type')){ missing.push({section:'Agreement', label:'Service Type'}); markMissing('asset-h-service-type'); }
+      if(!val('asset-h-service-frequency')){ missing.push({section:'Agreement', label:'Frequency of Service'}); markMissing('asset-h-service-frequency'); }
+    }
+    // Self Manage only has Year Selections while "Service fee / RECs (per
+    // selection year)" is ticked.
+    if(agreementType === 'Outright Purchase' || isSmPerYearOn()){
       const seenYears = {};
       for(let i=1;i<=yearCount;i++){
         if(!val('asset-y'+i+'-year')){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Year'}); markMissing('asset-y'+i+'-year'); }
@@ -8823,17 +8880,6 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           const svc = amountVal('asset-y'+i+'-service-fee');
           if(!svc.amt){ missing.push({section:'Pricing & Fees', label:'Selection '+i+' — Service fee'}); markMissing('asset-y'+i+'-service-fee-amt'); }
         }
-      }
-      if(agreementType === 'Self Manage'){
-        // One-time fees, shared design with Profit Sharing — validated once
-        // for the whole deal, not per-year. Not compulsory: only required
-        // once its own tick box is checked (see feeFieldHtml).
-        [['asset-sm-device-reg-fee','Device registration fee'],['asset-sm-recs-issuance-fee','RECs issuance fee'],['asset-sm-redemption-fee','Redemption fee']].forEach(([id,label])=>{
-          const toggle = document.getElementById(id+'-toggle');
-          if(toggle && toggle.checked && !amountVal(id).amt){
-            missing.push({section:'Pricing & Fees', label:label+' (one-time)'}); markMissing(id+'-amt');
-          }
-        });
       }
       if(agreementType === 'Outright Purchase'){
         // Hybrid's Profit Sharing terms only need to be filled in when the
@@ -8857,7 +8903,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           // Extra Charges Incurred are tick-only (no amount) — nothing to validate.
         }
       }
-    } else {
+    } else if(agreementType === 'Profit Sharing'){
       // Only Device Owner (%) is entered — Saxon's share is auto-filled
       // (see the input listener next to feeFieldHtml), so only Device
       // Owner needs to be validated here.
@@ -8913,6 +8959,10 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     const isHybridForType = !!(agreementType === 'Outright Purchase' && hybridToggleForType && hybridToggleForType.checked);
     rows.push(['Agreement Type', agreementType + (isHybridForType ? ' (Hybrid — Profit Sharing)' : '')]);
     rows.push(['Payment Term', val('asset-h-payment-term')]);
+    if(agreementType === 'Self Manage'){
+      rows.push(['Service Type', val('asset-h-service-type')]);
+      rows.push(['Frequency of Service', val('asset-h-service-frequency')]);
+    }
     rows.push(['Special Remarks', val('asset-h-remarks') || 'N/A']);
     const brokerOn = !!(document.getElementById('asset-h-broker-toggle') && document.getElementById('asset-h-broker-toggle').checked);
     rows.push(['Broker (if any)', brokerOn ? val('asset-h-broker') : 'N/A']);
@@ -8960,17 +9010,21 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     } else if(agreementType === 'Self Manage'){
       // Ticked-off fee tick boxes leave their amount blank here too — same
       // "only shown when applicable" rule the live form now follows.
-      out.push({heading:'Self Manage — one-time fees', cols:['Device registration fee','RECs issuance fee','Redemption fee'], rows:[[
+      out.push({heading:'Self Manage — fees', cols:['Device registration fee','RECs issuance fee','Redemption fee','Service fee / RECs','Special Charge Remarks'], rows:[[
         feeAmtForRow('asset-sm-device-reg-fee'),
         feeAmtForRow('asset-sm-recs-issuance-fee'),
-        feeAmtForRow('asset-sm-redemption-fee')
+        feeAmtForRow('asset-sm-redemption-fee'),
+        feeAmtForRow('asset-sm-service-fee'),
+        val('asset-sm-special-charge-remarks') || 'N/A'
       ]]});
-      out.push({heading:'Self Manage — yearly', cols:['Year','Service fee'], rows:[]});
-      for(let i=1;i<=yearCount;i++){
-        out[out.length-1].rows.push([
-          assetPeriodLabel(val('asset-y'+i+'-year')),
-          amountVal('asset-y'+i+'-service-fee').text
-        ]);
+      if(isSmPerYearOn()){
+        out.push({heading:'Self Manage — Service fee / RECs (per selection year)', cols:['Year','Service fee / RECs'], rows:[]});
+        for(let i=1;i<=yearCount;i++){
+          out[out.length-1].rows.push([
+            assetPeriodLabel(val('asset-y'+i+'-year')),
+            amountVal('asset-y'+i+'-service-fee').text
+          ]);
+        }
       }
     } else {
       out.push({heading:'Profit Sharing', cols:['Profit Ratio (Device Owner : Saxon)'], rows:[[
@@ -9363,6 +9417,8 @@ function applyAssetDraftData(data){
   document.querySelectorAll('#tab-panel-asset .asset-fee-toggle').forEach(el=>{
     el.dispatchEvent(new Event('change'));
   });
+  // Self Manage "Service fee / RECs (per selection year)" -> Year Selections.
+  if(window.assetSyncSmYearUi) window.assetSyncSmYearUi();
   currentAssetDocId = data.assetId || null;
   currentAssetSubmittedDate = data.submittedDate || null;
   suppressAssetAutosave = false;
@@ -9613,15 +9669,22 @@ async function saveAssetToLog(){
         row[mc.specialChargeRemarks] = v('asset-op-hybrid-special-charge-remarks');
       }
     } else if(agreementType === 'Self Manage'){
-      for(let y = 1; y <= yearCount; y++){
-        const yearVal = v('asset-y'+y+'-year');
-        if(yearVal){
-          writeAmount(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
+      // Per-selection-year service fees only when that tick box is on.
+      if(window.assetIsSmPerYearOn && window.assetIsSmPerYearOn()){
+        for(let y = 1; y <= yearCount; y++){
+          const yearVal = v('asset-y'+y+'-year');
+          if(yearVal){
+            writeAmount(row, 'service'+yearVal, 'asset-y'+y+'-service-fee');
+          }
         }
       }
       writeAmount(row, 'deviceRegFee', 'asset-sm-device-reg-fee');
       writeAmount(row, 'recsIssuanceFee', 'asset-sm-recs-issuance-fee');
       writeAmount(row, 'redemptionFee', 'asset-sm-redemption-fee');
+      writeAmount(row, 'serviceFee', 'asset-sm-service-fee');
+      row[mc.serviceType] = v('asset-h-service-type');
+      row[mc.serviceFrequency] = v('asset-h-service-frequency');
+      row[mc.specialChargeRemarks] = v('asset-sm-special-charge-remarks');
     } else { // Profit Sharing
       row[mc.profitRatioSaxon] = v('asset-ps-ratio-saxon');
       row[mc.profitRatioOwner] = v('asset-ps-ratio-owner');
@@ -9802,6 +9865,10 @@ async function addAssetApprovalToList(agreementType, values){
   desiredByDisplayName['Device Registration Fee Amount'] = hasOneTimeFees ? values[mc.deviceRegFeeAmt] : '';
   desiredByDisplayName['RECs Issuance Fee Amount'] = hasOneTimeFees ? values[mc.recsIssuanceFeeAmt] : '';
   desiredByDisplayName['Redemption Fee Amount'] = hasOneTimeFees ? values[mc.redemptionFeeAmt] : '';
+  // Self Manage only.
+  desiredByDisplayName['Service Type'] = (agreementType === 'Self Manage') ? (values[mc.serviceType] || '') : '';
+  desiredByDisplayName['Frequency of Service'] = (agreementType === 'Self Manage') ? (values[mc.serviceFrequency] || '') : '';
+  desiredByDisplayName['Service Fee Amount'] = (agreementType === 'Self Manage') ? values[mc.serviceFeeAmt] : '';
   desiredByDisplayName['Special Charge Remarks'] = ('specialChargeRemarks' in mc) ? (values[mc.specialChargeRemarks] || '') : '';
   const fields = {};
   const skipped = [];       // no column on the list matches this display name at all
