@@ -1091,9 +1091,9 @@ const DEAL_ID_START_KEY = "dealIdStart";
 // Number.
 // Then, per table:
 //   AssetTradeDealLog_OutrightPurchase adds: Price/RECs Amount for each
-//     fixed year 2020..2030 (11 columns).
+//     fixed year 2024..2034 (11 columns).
 //   AssetTradeDealLog_SelfManage adds: Service Fee/RECs Amount for each
-//     fixed year 2020..2030 (11 cols) + Device Registration Fee / RECs
+//     fixed year 2024..2034 (11 cols) + Device Registration Fee / RECs
 //     Issuance Fee / Redemption Fee, each as a ONE-TIME Amount for the
 //     whole deal (3 cols) — these 3 fees are shared-design with Profit
 //     Sharing, not per-year. (Self Manage originally also had per-year
@@ -1109,7 +1109,7 @@ const DEAL_ID_START_KEY = "dealIdStart";
 //   Approved Date (Level 2), Approved By (Level 3), Approved Date (Level
 //   3), Rejected By, Rejected Date, Rejection Comment, Agreement File
 //   Name, Agreement File URL, Description, Row Uid, Approved List Item Id.
-const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
+const ASSET_YEAR_MIN = 2024, ASSET_YEAR_MAX = 2034;
 const ASSET_CURRENCY_OPTIONS = ['USD','SGD','MYR','EUR'];
 const ASSET_SHARED_KEYS = [
   'bdInCharge','assetId','entity','agreementStart','agreementEnd','supplier',
@@ -1128,8 +1128,8 @@ function assetYearFeeKeys(prefix){
   return keys;
 }
 // Half-year variants (1st half / 2nd half) of a per-year fee, e.g.
-// assetHalfYearFeeKeys('price') -> price2020H1Amt, price2020H2Amt,
-// price2021H1Amt, price2021H2Amt, ... These are NEW columns added on top of
+// assetHalfYearFeeKeys('price') -> price2024H1Amt ... price2034H1Amt,
+// then price2024H2Amt ... price2034H2Amt These are NEW columns added on top of
 // the original full-year-only ones (assetYearFeeKeys), so — same
 // append-only-at-the-end rule as everywhere else in this file — they must
 // always be passed as `extraKeys` to buildAssetColMap (i.e. placed after
@@ -1137,7 +1137,9 @@ function assetYearFeeKeys(prefix){
 // existing row's column positions shift and old data reads back wrong.
 function assetHalfYearFeeKeys(prefix){
   const keys = [];
-  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'H1Amt', prefix+y+'H2Amt'); }
+  // Grouped: all 1st halves (2024..2034) first, then all 2nd halves.
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'H1Amt'); }
+  for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){ keys.push(prefix+y+'H2Amt'); }
   return keys;
 }
 const ASSET_ONETIME_FEE_KEYS = ['deviceRegFeeAmt','recsIssuanceFeeAmt','redemptionFeeAmt'];
@@ -8442,9 +8444,11 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
           feeFieldHtml('RECs issuance fee', 'asset-sm-recs-issuance-fee')+
           feeFieldHtml('Redemption fee', 'asset-sm-redemption-fee')+
           feeFieldHtml('Service fee / RECs', 'asset-sm-service-fee')+
-          feeTickHtml('Service fee / RECs (per selection year)', 'asset-sm-service-fee-yearly')+
         '</div>'+
         specialChargeRemarksHtml('asset-sm-special-charge-remarks')+
+        '<div style="margin-top:16px;">'+
+          feeTickHtml('Service fee / RECs (per selection year)', 'asset-sm-service-fee-yearly')+
+        '</div>'+
         '<div id="asset-sm-year-section" style="display:none;">'+
           '<div class="trade-count-row" style="margin-top:16px;">'+
             '<label style="margin:0;">Year Selections</label>'+
@@ -8578,7 +8582,7 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
     yearCount = n;
     renderYearRows();
   }
-  // Fixed 2020-2030 range so a selected "Year" value maps 1:1 onto a real
+  // Fixed 2024-2034 range so a selected "Year" value maps 1:1 onto a real
   // Excel column (e.g. "Price / RECs 2025 (USD/SGD)") instead of being free
   // text like the old "e.g. V25" placeholder, which couldn't be reliably
   // parsed back into a column to write into. The dropdown still shows the
@@ -8596,21 +8600,20 @@ document.getElementById('save-agreement-btn').addEventListener('click', async ()
   // H1/H2 columns in ASSET_OP_EXTRA_KEYS/ASSET_MC_SM above are named
   // price<year>H1Amt/H2Amt / service<year>H1Amt/H2Amt — matching this value
   // exactly.
-  const ASSET_YEAR_MIN = 2020, ASSET_YEAR_MAX = 2030;
+  const ASSET_YEAR_MIN = 2024, ASSET_YEAR_MAX = 2034;
   const ASSET_PERIOD_RE = /^(\d{4})(H[12])?$/;
   function assetYearOptionsHtml(selectedValue){
+    // Grouped: all Full Years (V24..V34) first, then all 1st Halves
+    // (1HV24..1HV34), then all 2nd Halves (2HV24..2HV34).
     let opts = '<option value="">Select year</option>';
-    for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
-      const short = String(y).slice(2);
-      const variants = [
-        {value:String(y), label:'V'+short+' — '+y+' (Full Year)'},
-        {value:y+'H1', label:'1HV'+short+' — '+y+' (1st Half)'},
-        {value:y+'H2', label:'2HV'+short+' — '+y+' (2nd Half)'}
-      ];
-      variants.forEach(opt=>{
-        opts += '<option value="'+opt.value+'"'+(String(selectedValue) === opt.value ? ' selected' : '')+'>'+opt.label+'</option>';
-      });
-    }
+    const groups = [['', 'V', 'Full Year'], ['H1', '1HV', '1st Half'], ['H2', '2HV', '2nd Half']];
+    groups.forEach(([suffix, prefix, name])=>{
+      for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
+        const short = String(y).slice(2);
+        const value = y + suffix;
+        opts += '<option value="'+value+'"'+(String(selectedValue) === value ? ' selected' : '')+'>'+prefix+short+' — '+y+' ('+name+')</option>';
+      }
+    });
     return opts;
   }
   // Reads back the selected period value ("2025", "2025H1", "2025H2") for
@@ -9840,7 +9843,7 @@ async function addAssetApprovalToList(agreementType, values){
   // parallel columns, since 'Agreement Type' above already tells you which
   // of the two a given row's amount is. Blank for Profit Sharing, which has
   // neither. Fixed 2020..2030 range mirrors the split Excel tables' own
-  // fixed-year columns. Amount only — currency is the single shared
+  // fixed-year columns (2024..2034). Amount only — currency is the single shared
   // "Currency" field above.
   for(let y = ASSET_YEAR_MIN; y <= ASSET_YEAR_MAX; y++){
     let amt = '', amtH1 = '', amtH2 = '';
