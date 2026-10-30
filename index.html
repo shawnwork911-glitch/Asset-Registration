@@ -904,6 +904,9 @@ html[data-theme="dark"] #desk-actionbar{box-shadow:0 -6px 22px rgba(0,0,0,.45);}
 #history-list td:last-child,#admin-history-list td:last-child,#approval-queue-list td:last-child,#urgent-deliveries-list td:last-child,#overdue-deliveries-list td:last-child,#hourly-deals-list td:last-child,#newdevice-deals-list td:last-child{white-space:normal !important;min-width:120px;}
 #history-list td:last-child button,#admin-history-list td:last-child button,#approval-queue-list td:last-child button,#urgent-deliveries-list td:last-child button,#overdue-deliveries-list td:last-child button,#hourly-deals-list td:last-child button,#newdevice-deals-list td:last-child button{margin:2px 0;}
 td.desk-pin{white-space:nowrap;}
+#history-list td:last-child,#admin-history-list td:last-child,#approval-queue-list td:last-child,#urgent-deliveries-list td:last-child,#overdue-deliveries-list td:last-child,#hourly-deals-list td:last-child,#newdevice-deals-list td:last-child{padding-right:14px;}
+#history-list td:last-child button,#admin-history-list td:last-child button,#approval-queue-list td:last-child button,#urgent-deliveries-list td:last-child button,#overdue-deliveries-list td:last-child button,#hourly-deals-list td:last-child button,#newdevice-deals-list td:last-child button{white-space:nowrap;}
+#history-list td[colspan],#admin-history-list td[colspan],#approval-queue-list td[colspan],#urgent-deliveries-list td[colspan],#overdue-deliveries-list td[colspan],#hourly-deals-list td[colspan],#newdevice-deals-list td[colspan]{padding-right:14px;}
 </style>
 <script>
 // Applied immediately (before body paints) so returning users don't see a
@@ -12737,6 +12740,7 @@ document.getElementById('redemption-refresh-btn').addEventListener('click', ()=>
   }
   function enhanceTable(container, table){
     table.setAttribute('data-desk','1');
+    [].slice.call(table.querySelectorAll('.history-revert-btn')).forEach(function(b){ if(b.textContent.trim()==='Revert to submitter') b.textContent='Revert'; });
     var rows=[].slice.call(table.querySelectorAll('tr'));
     var head=rows.shift(); if(!head) return;
     var ths=[].slice.call(head.children);
