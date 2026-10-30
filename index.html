@@ -886,6 +886,24 @@ html[data-theme="dark"] #desk-actionbar{box-shadow:0 -6px 22px rgba(0,0,0,.45);}
   .desk-sum{display:none;}
   #main-tabs{bottom:0;}
 }
+
+/* ---- Fix: every confirmations list gets the same compact table + never overflows its card ---- */
+#approval-queue-list,#urgent-deliveries-list,#overdue-deliveries-list,#hourly-deals-list,#newdevice-deals-list,#history-list,#admin-history-list{overflow-x:auto;max-width:100%;}
+#approval-queue-list table,#urgent-deliveries-list table,#overdue-deliveries-list table,#hourly-deals-list table,#newdevice-deals-list table{width:100%;border-collapse:collapse;font-size:13px;}
+#approval-queue-list th,#urgent-deliveries-list th,#overdue-deliveries-list th,#hourly-deals-list th,#newdevice-deals-list th{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);
+  text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);white-space:nowrap;
+}
+#approval-queue-list td,#urgent-deliveries-list td,#overdue-deliveries-list td,#hourly-deals-list td,#newdevice-deals-list td{padding:6px;vertical-align:middle;}
+#approval-queue-list tbody tr:hover,#urgent-deliveries-list tbody tr:hover,#overdue-deliveries-list tbody tr:hover,#hourly-deals-list tbody tr:hover,#newdevice-deals-list tbody tr:hover{background:var(--glow);}
+#history-list td button,#admin-history-list td button,#approval-queue-list td button,#urgent-deliveries-list td button,#overdue-deliveries-list td button,#hourly-deals-list td button,#newdevice-deals-list td button{padding:4px 10px;font-size:12px;}
+/* sticky headers need the page as scroll parent, which overflow-x:auto removes — keep them static */
+#history-list th,#admin-history-list th,#approval-queue-list th,#urgent-deliveries-list th,#overdue-deliveries-list th,#hourly-deals-list th,#newdevice-deals-list th{position:static;top:auto;}
+#history-list .desk-pin,#admin-history-list .desk-pin,#approval-queue-list .desk-pin,#urgent-deliveries-list .desk-pin,#overdue-deliveries-list .desk-pin,#hourly-deals-list .desk-pin,#newdevice-deals-list .desk-pin{position:sticky;left:0;background:var(--surface);z-index:1;}
+#history-list th.desk-pin,#admin-history-list th.desk-pin,#approval-queue-list th.desk-pin,#urgent-deliveries-list th.desk-pin,#overdue-deliveries-list th.desk-pin,#hourly-deals-list th.desk-pin,#newdevice-deals-list th.desk-pin{background:var(--surface-2);z-index:3;}
+#history-list td:last-child,#admin-history-list td:last-child,#approval-queue-list td:last-child,#urgent-deliveries-list td:last-child,#overdue-deliveries-list td:last-child,#hourly-deals-list td:last-child,#newdevice-deals-list td:last-child{white-space:normal !important;min-width:120px;}
+#history-list td:last-child button,#admin-history-list td:last-child button,#approval-queue-list td:last-child button,#urgent-deliveries-list td:last-child button,#overdue-deliveries-list td:last-child button,#hourly-deals-list td:last-child button,#newdevice-deals-list td:last-child button{margin:2px 0;}
+td.desk-pin{white-space:nowrap;}
 </style>
 <script>
 // Applied immediately (before body paints) so returning users don't see a
